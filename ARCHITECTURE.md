@@ -2,7 +2,7 @@
 
 ## 1. System purpose
 
-Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. The first product stage, deterministic repository scanning, is implemented; parsing and knowledge generation remain planned.
+Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. Deterministic repository scanning and JavaScript/TypeScript source parsing are implemented; cross-file resolution and knowledge generation remain planned.
 
 ## 2. Current workspace structure
 
@@ -26,7 +26,7 @@ libs/
 
 - **web:** Bootstraps the future local wiki, graph, repository navigation, search, and context-inspection interface. It currently renders only the starter page.
 - **api:** Owns local HTTP transport and future indexing orchestration and knowledge queries. It currently exposes only `GET /health`; server construction is separate from network binding.
-- **cli:** Owns the command-line transport. It implements `lattice index [repository-path]`, defaulting to the current directory, and prints a concise scan summary. Other planned commands are not implemented.
+- **cli:** Owns the command-line transport. It implements `lattice index [repository-path]` and `lattice analyze [repository-path] [--json]`, both defaulting to the current directory. It prints concise human summaries or a deterministic versioned JSON DTO. Parsing remains in the core parser library.
 - **mcp-server:** Owns the future Model Context Protocol transport for coding agents. It currently prints `Lattice MCP Server` and implements no MCP behavior.
 
 Applications are entry points and composition roots. Reusable logic belongs in libraries.
@@ -35,8 +35,8 @@ Applications are entry points and composition roots. Reusable logic belongs in l
 
 ### Core
 
-- **parser:** Language-independent parsing interfaces.
-- **indexer:** Validates repository roots and deterministically describes source files. It owns ignore policy, binary and size filtering, extension-based language detection, stable path IDs, scan models, and repository-scanning domain errors. Parsing and incremental persistence are not implemented.
+- **parser:** Consumes repository scans, verifies scanned content hashes through the injected filesystem boundary, parses TypeScript, TSX, JavaScript, and JSX with Tree-sitter, and produces the language-independent repository-analysis model. It owns deterministic symbol/import/export extraction, stable structural IDs, syntax diagnostics, and per-file failure isolation. Tree-sitter types remain private to this boundary.
+- **indexer:** Validates repository roots and deterministically describes source files. It owns ignore policy, binary and size filtering, extension-based language detection, stable path IDs, scan models, and repository-scanning domain errors. Parsing is downstream; incremental persistence is not implemented.
 - **analyzer:** Deterministic and future AI-assisted analysis.
 - **knowledge:** Knowledge pages, claims, summaries, and links.
 - **graph:** Graph entities, relationships, and traversal.
@@ -81,9 +81,10 @@ Nx tags and `@nx/enforce-module-boundaries` define the allowed directions:
 
 No library may import an application. Cross-project imports use `@lattice/*` aliases and public entry points. Circular dependencies are prohibited. A project should not add a dependency merely to demonstrate that it is allowed.
 
-The indexer's import of the public `@lattice/filesystem` abstraction is the single
-core-to-data-access exception. ESLint allows that exact public alias without opening
-core libraries to other data-access projects or internal filesystem modules.
+The indexer and parser imports of the public `@lattice/filesystem` abstraction are
+the narrow core-to-data-access exception. ESLint allows that exact public alias
+without opening core libraries to other data-access projects or internal filesystem
+modules. Both libraries use dependency injection and public entry points.
 
 ## 6. Current runtime topology
 
@@ -99,7 +100,7 @@ User
              └── Shared Lattice libraries
 ```
 
-This diagram shows the intended entry-point relationships, not a set of running distributed services. All components are local processes in one monorepo. The CLI invokes the repository scanner for `lattice index`; the MCP entry point still only prints a startup message, the web application is static scaffolding, and the API only reports health.
+This diagram shows the intended entry-point relationships, not a set of running distributed services. All components are local processes in one monorepo. The CLI invokes the repository scanner for `lattice index` and composes scanner plus parser for `lattice analyze`; the MCP entry point still only prints a startup message, the web application is static scaffolding, and the API only reports health.
 
 ## 7. Current data flow
 
@@ -110,7 +111,11 @@ Filesystem Scanner
     ↓
 Repository Scan
     ↓
-(Parsers — planned)
+Tree-sitter Parser
+    ↓
+Language-independent Repository Analysis
+    ↓
+Cross-file relationship resolution — planned
     ↓
 Knowledge Builder — planned
 ```
@@ -120,6 +125,28 @@ adapter walks entries and reads file bytes; the indexer applies ignore and file
 eligibility policy and returns a scan sorted by repository-relative path. A scan
 contains no parsed code or persisted state and does not modify its repository.
 
+The parser consumes only scan records rather than traversing the repository again.
+For supported files it reads UTF-8 bytes through the same injected filesystem
+boundary, compares SHA-256 content hashes with the scan, and parses a consistent
+snapshot. Unsupported languages are skipped. Each parsed file contains ordered
+symbols, static imports, exports, and diagnostics; raw syntax trees and source text
+do not cross the library boundary. Lines are one-based and columns are zero-based
+UTF-8 byte offsets.
+
+Symbol identity hashes the file ID, symbol kind, qualified name, and declaration
+start position. This is stable for repeated unchanged analyses; moving a declaration
+may change its ID. All repository-derived collections are explicitly sorted.
+Recoverable syntax errors produce diagnostics without discarding other extracted
+structure. Read, hash-consistency, or unusable-parse failures affect only their file.
+Cross-file resolution is deferred because it requires module-resolution policy and
+must not be conflated with deterministic per-file syntax extraction.
+
+The CLI JSON serialization boundary is separate from the parser domain model. It
+constructs an explicit schema-versioned DTO, copies supported fields intentionally,
+and omits timestamps, durations, source contents, and per-file absolute paths. This
+keeps machine-readable CLI compatibility deliberate without coupling parser model
+evolution directly to an external wire format.
+
 The API still implements only `GET /health`. The web and MCP entry points do not
 consume repository scans yet.
 
@@ -127,7 +154,7 @@ consume repository scans yet.
 
 > **Planned — not implemented.**
 
-Repository scans will feed deterministic parsers, analysis, knowledge, and graph libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
+Repository analyses will feed planned cross-file resolution, knowledge, and graph libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
 
 ## 9. Architectural decision log
 
@@ -143,6 +170,10 @@ Repository scans will feed deterministic parsers, analysis, knowledge, and graph
 | 2026-07-20 | Keep repository I/O behind an injected filesystem adapter                            | Accepted | Keeps scanner policy separate from Node I/O, makes failures explicit, and supports deterministic tests.                                                            |
 | 2026-07-20 | Derive file identity from normalized relative paths and content hashes from bytes    | Accepted | Makes unchanged scan records stable and provides deterministic inputs for future incremental indexing.                                                             |
 | 2026-07-20 | Allow the indexer to depend on the public filesystem abstraction                     | Accepted | The scanner domain orchestrates repository discovery while direct filesystem operations remain in the adapter; the exception is limited to the exact public alias. |
+| 2026-07-20 | Use Tree-sitter as the deterministic syntax layer                                    | Accepted | Tree-sitter provides resilient concrete syntax trees without introducing compiler services; compatible Node and grammar versions are pinned.                       |
+| 2026-07-20 | Initially parse only JavaScript, JSX, TypeScript, and TSX                            | Accepted | A narrow related-language scope provides useful structure while keeping extraction rules explicit and testable.                                                    |
+| 2026-07-20 | Return a language-independent repository-analysis model                              | Accepted | Downstream components depend on stable source concepts rather than Tree-sitter node types or grammar details.                                                      |
+| 2026-07-20 | Isolate syntax diagnostics and hard failures per file                                | Accepted | Partial or changing files must not invalidate useful deterministic analysis from the rest of a repository.                                                         |
 
 ## 10. Documentation-update rules
 

@@ -6,6 +6,11 @@
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "dependencies": {
+    "@lattice/core-indexer": "*",
+    "@lattice/filesystem": "*",
+    "tree-sitter": "0.21.1",
+    "tree-sitter-javascript": "0.23.1",
+    "tree-sitter-typescript": "0.23.2",
     "tslib": "^2.3.0"
   }
 }

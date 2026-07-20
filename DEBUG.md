@@ -32,6 +32,50 @@ Add an entry when an investigation reveals a non-obvious root cause, a recurring
 
 ## Known issues
 
+### 2026-07-20 — Tree-sitter grammar peers require the 0.21 Node binding
+
+#### Context
+
+Milestone 2 added the maintained Node Tree-sitter binding plus the JavaScript and
+TypeScript grammar packages.
+
+#### Symptoms
+
+Installing `tree-sitter@0.25.0`, `tree-sitter-javascript@0.25.0`, and
+`tree-sitter-typescript@0.23.2` failed with npm `ERESOLVE`.
+
+#### Reproduction
+
+Attempt to install that package set with npm's normal peer-dependency validation.
+
+#### Investigation
+
+npm package metadata showed that the current TypeScript grammar declares
+`tree-sitter@^0.21.0`, while JavaScript grammar 0.25 declares
+`tree-sitter@^0.25.0`. JavaScript grammar 0.23.1 declares
+`tree-sitter@^0.21.1` and is compatible with TypeScript grammar 0.23.2.
+
+#### Root cause
+
+The latest published JavaScript grammar and TypeScript grammar do not currently
+share a compatible Node-binding peer range.
+
+#### Fix
+
+Pin `tree-sitter@0.21.1`, `tree-sitter-javascript@0.23.1`, and
+`tree-sitter-typescript@0.23.2`. Do not bypass peer validation with `--force` or
+`--legacy-peer-deps`.
+
+#### Verification
+
+The compatible set installed normally, loaded all three grammars, parsed TypeScript,
+TSX, JavaScript, and JSX fixtures, and passed parser tests and production builds.
+
+#### Prevention and follow-up
+
+Check all grammar peer ranges together before upgrading any Tree-sitter package.
+Move to a newer Node binding only when both maintained grammars declare support.
+
 ### 2026-07-20 — Vitest did not resolve workspace TypeScript aliases
 
 #### Context

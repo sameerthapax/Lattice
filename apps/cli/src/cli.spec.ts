@@ -3,9 +3,21 @@ import {
   SupportedLanguage,
   type RepositoryScan,
 } from '@lattice/core-indexer';
+import type { RepositoryAnalysis } from '@lattice/core-parser';
+import { NodeRepositoryFileSystem } from '@lattice/filesystem';
 import { describe, expect, it, vi } from 'vitest';
 
-import { formatScanSummary, runCli, type CliDependencies } from './cli';
+import {
+  buildAnalyzeJsonOutput,
+  serializeAnalyzeJson,
+  SYMBOL_KINDS,
+} from './analyze-output';
+import {
+  formatAnalysisSummary,
+  formatScanSummary,
+  runCli,
+  type CliDependencies,
+} from './cli';
 
 const scan: RepositoryScan = {
   rootPath: '/repository',
@@ -18,6 +30,90 @@ const scan: RepositoryScan = {
     createFile('src/app.ts', SupportedLanguage.TypeScript),
     createFile('src/tool.ts', SupportedLanguage.TypeScript),
   ],
+};
+
+const analysis: RepositoryAnalysis = {
+  rootPath: '/repository',
+  analyzedAt: new Date('2026-07-20T12:00:01.000Z'),
+  scannedFileCount: 3,
+  parsedFileCount: 2,
+  skippedFileCount: 1,
+  failedFileCount: 0,
+  files: [
+    {
+      fileId: 'src/app.ts',
+      relativePath: 'src/app.ts',
+      language: 'TypeScript',
+      contentHash: 'hash',
+      symbols: [
+        {
+          id: 'symbol',
+          name: 'run',
+          qualifiedName: 'run',
+          kind: 'function',
+          fileId: 'src/app.ts',
+          parentSymbolId: null,
+          exported: true,
+          async: false,
+          location: { startLine: 1, startColumn: 0, endLine: 1, endColumn: 17 },
+        },
+      ],
+      imports: [
+        {
+          id: 'import',
+          fileId: 'src/app.ts',
+          source: './dependency',
+          kind: 'named',
+          importedName: 'dependency',
+          localName: 'dependency',
+          typeOnly: false,
+          location: {
+            startLine: 1,
+            startColumn: 0,
+            endLine: 1,
+            endColumn: 40,
+          },
+        },
+      ],
+      exports: [
+        {
+          id: 'export',
+          fileId: 'src/app.ts',
+          kind: 'named',
+          exportedName: 'run',
+          localName: 'run',
+          source: null,
+          symbolId: 'symbol',
+          typeOnly: false,
+          location: {
+            startLine: 2,
+            startColumn: 0,
+            endLine: 2,
+            endColumn: 24,
+          },
+        },
+      ],
+      diagnostics: [],
+    },
+    {
+      fileId: 'src/tool.ts',
+      relativePath: 'src/tool.ts',
+      language: 'TypeScript',
+      contentHash: 'hash',
+      symbols: [],
+      imports: [],
+      exports: [],
+      diagnostics: [
+        {
+          severity: 'error',
+          code: 'TREE_SITTER_SYNTAX_ERROR',
+          message: 'Invalid syntax.',
+          location: { startLine: 1, startColumn: 0, endLine: 1, endColumn: 1 },
+        },
+      ],
+    },
+  ],
+  failures: [],
 };
 
 describe('runCli', () => {
@@ -39,6 +135,209 @@ describe('runCli', () => {
     await runCli(['index', '../project'], dependencies);
 
     expect(dependencies.scan).toHaveBeenCalledWith({ rootPath: '../project' });
+  });
+
+  it('analyzes the current directory when no path is supplied', async () => {
+    const dependencies = createDependencies();
+
+    const exitCode = await runCli(['analyze'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.scan).toHaveBeenCalledWith({ rootPath: '/current' });
+    expect(dependencies.analyze).toHaveBeenCalledWith({
+      scan,
+      fileSystem: dependencies.fileSystem,
+    });
+    expect(dependencies.writeOutput).toHaveBeenCalledWith(
+      expect.stringContaining('Repository analyzed successfully'),
+    );
+  });
+
+  it('analyzes an explicitly supplied repository path', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '../project'], dependencies);
+
+    expect(dependencies.scan).toHaveBeenCalledWith({ rootPath: '../project' });
+  });
+
+  it('emits valid JSON for an explicit repository path', async () => {
+    const dependencies = createDependencies();
+
+    const exitCode = await runCli(['analyze', '.', '--json'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.scan).toHaveBeenCalledWith({ rootPath: '.' });
+    const output = getWrittenOutput(dependencies);
+    expect(() => JSON.parse(output)).not.toThrow();
+    expect(JSON.parse(output)).toMatchObject({
+      schemaVersion: '1',
+      command: 'analyze',
+      summary: {
+        scannedFileCount: 3,
+        parsedFileCount: 2,
+        skippedFileCount: 1,
+        failedFileCount: 0,
+        filesWithSyntaxErrors: 1,
+        symbolCount: 1,
+        importCount: 1,
+        exportCount: 1,
+      },
+    });
+  });
+
+  it('defaults JSON analysis to the current directory', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '--json'], dependencies);
+
+    expect(dependencies.scan).toHaveBeenCalledWith({ rootPath: '/current' });
+  });
+
+  it('emits JSON only with exactly one trailing newline', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '--json'], dependencies);
+
+    const output = getWrittenOutput(dependencies);
+    expect(output).not.toContain('Repository analyzed successfully');
+    expect(output).not.toContain('\nSymbols\n');
+    expect(output.endsWith('\n')).toBe(true);
+    expect(output.endsWith('\n\n')).toBe(false);
+  });
+
+  it('includes every detailed analysis collection without nondeterministic fields', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '--json'], dependencies);
+
+    const output = getWrittenOutput(dependencies);
+    const parsed = JSON.parse(output) as Record<string, unknown>;
+    const outputAnalysis = parsed['analysis'] as {
+      readonly files: readonly Record<string, unknown>[];
+      readonly failures: readonly unknown[];
+    };
+    expect(outputAnalysis.failures).toEqual([]);
+    expect(outputAnalysis.files[0]).toMatchObject({
+      fileId: 'src/app.ts',
+      relativePath: 'src/app.ts',
+      symbols: expect.any(Array),
+      imports: expect.any(Array),
+      exports: expect.any(Array),
+      diagnostics: expect.any(Array),
+    });
+    expect(outputAnalysis.files[1]).toMatchObject({
+      diagnostics: [
+        expect.objectContaining({ code: 'TREE_SITTER_SYNTAX_ERROR' }),
+      ],
+    });
+    expect(output).not.toContain('analyzedAt');
+    expect(output).not.toContain('duration');
+  });
+
+  it('keeps per-file failures in JSON while returning success', async () => {
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.analyze).mockResolvedValue({
+      ...analysis,
+      failedFileCount: 1,
+      failures: [
+        {
+          fileId: 'missing-file',
+          relativePath: 'src/missing.ts',
+          code: 'SOURCE_READ_FAILED',
+          message: 'Could not read source file: src/missing.ts',
+        },
+      ],
+    });
+
+    const exitCode = await runCli(['analyze', '--json'], dependencies);
+    const parsed = JSON.parse(getWrittenOutput(dependencies)) as {
+      readonly summary: { readonly failedFileCount: number };
+      readonly analysis: { readonly failures: readonly unknown[] };
+    };
+
+    expect(exitCode).toBe(0);
+    expect(parsed.summary.failedFileCount).toBe(1);
+    expect(parsed.analysis.failures).toEqual([
+      expect.objectContaining({
+        relativePath: 'src/missing.ts',
+        code: 'SOURCE_READ_FAILED',
+      }),
+    ]);
+  });
+
+  it('writes repository-level JSON mode failures only to stderr', async () => {
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.scan).mockRejectedValue(
+      new RepositoryNotFoundError('/missing'),
+    );
+
+    const exitCode = await runCli(
+      ['analyze', '/missing', '--json'],
+      dependencies,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(dependencies.writeOutput).not.toHaveBeenCalled();
+    expect(dependencies.writeError).toHaveBeenCalledWith(
+      'Repository path does not exist: /missing',
+    );
+  });
+
+  it('rejects unknown and misplaced flags', async () => {
+    const dependencies = createDependencies();
+
+    await expect(runCli(['analyze', '.', '--xml'], dependencies)).resolves.toBe(
+      1,
+    );
+    await expect(runCli(['index', '.', '--json'], dependencies)).resolves.toBe(
+      1,
+    );
+
+    expect(dependencies.writeError).toHaveBeenCalledWith(
+      'Unknown option: --xml\nUsage: lattice analyze [repository-path] [--json]',
+    );
+    expect(dependencies.writeError).toHaveBeenCalledWith(
+      'Unknown option: --json\nUsage: lattice index [repository-path]',
+    );
+    expect(dependencies.scan).not.toHaveBeenCalled();
+  });
+
+  it('preserves the exact human-readable analyze output', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '.'], dependencies);
+
+    expect(dependencies.writeOutput).toHaveBeenCalledWith(
+      `${formatAnalysisSummary(analysis, 0.812)}\n`,
+    );
+  });
+
+  it('produces byte-for-byte identical JSON for identical analysis', async () => {
+    const firstDependencies = createDependencies();
+    const secondDependencies = createDependencies();
+
+    await runCli(['analyze', '--json'], firstDependencies);
+    await runCli(['analyze', '--json'], secondDependencies);
+
+    expect(getWrittenOutput(firstDependencies)).toBe(
+      getWrittenOutput(secondDependencies),
+    );
+  });
+
+  it('uses fixed symbol summary key order and excludes sensitive file data', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(['analyze', '--json'], dependencies);
+
+    const output = getWrittenOutput(dependencies);
+    const parsed = JSON.parse(output) as {
+      readonly summary: { readonly symbolsByKind: Record<string, number> };
+    };
+    expect(Object.keys(parsed.summary.symbolsByKind)).toEqual(SYMBOL_KINDS);
+    expect(output).not.toContain('absolutePath');
+    expect(output).not.toContain('/repository/src/app.ts');
+    expect(output).not.toContain('SUPER_SECRET_SOURCE_TEXT');
   });
 
   it('prints an actionable domain error for an invalid path', async () => {
@@ -63,7 +362,44 @@ describe('runCli', () => {
       1,
     );
     expect(dependencies.writeError).toHaveBeenCalledWith(
-      'Usage: lattice index [repository-path]',
+      'Usage: lattice <index|analyze> [repository-path]',
+    );
+  });
+
+  it('returns a nonzero exit code for an invalid analysis path', async () => {
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.scan).mockRejectedValue(
+      new RepositoryNotFoundError('/missing'),
+    );
+
+    const exitCode = await runCli(['analyze', '/missing'], dependencies);
+
+    expect(exitCode).toBe(1);
+    expect(dependencies.writeError).toHaveBeenCalledWith(
+      'Repository path does not exist: /missing',
+    );
+  });
+
+  it('reports isolated parse failures without failing the command', async () => {
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.analyze).mockResolvedValue({
+      ...analysis,
+      failedFileCount: 1,
+      failures: [
+        {
+          fileId: 'src/missing.ts',
+          relativePath: 'src/missing.ts',
+          code: 'SOURCE_READ_FAILED',
+          message: 'Could not read source file: src/missing.ts',
+        },
+      ],
+    });
+
+    const exitCode = await runCli(['analyze', '.'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.writeOutput).toHaveBeenCalledWith(
+      expect.stringContaining('Parse failures: 1'),
     );
   });
 });
@@ -85,15 +421,105 @@ describe('formatScanSummary', () => {
   });
 });
 
+describe('formatAnalysisSummary', () => {
+  it('prints every symbol category and stable aggregate counts', () => {
+    expect(formatAnalysisSummary(analysis, 0.812)).toBe(
+      [
+        'Repository analyzed successfully',
+        'Files scanned: 3',
+        'Files parsed: 2',
+        'Files skipped: 1',
+        'Parse failures: 0',
+        'Symbols',
+        'Functions: 1',
+        'Classes: 0',
+        'Methods: 0',
+        'Constructors: 0',
+        'Interfaces: 0',
+        'Type aliases: 0',
+        'Enums: 0',
+        'Variables: 0',
+        'Imports: 1',
+        'Exports: 1',
+        'Files with syntax errors: 1',
+        'Duration: 0.81s',
+      ].join('\n'),
+    );
+  });
+});
+
+describe('serializeAnalyzeJson', () => {
+  it('uses the exact versioned property order and one trailing newline', () => {
+    const emptyAnalysis: RepositoryAnalysis = {
+      rootPath: '/repository',
+      analyzedAt: new Date('2099-01-01T00:00:00.000Z'),
+      scannedFileCount: 0,
+      parsedFileCount: 0,
+      skippedFileCount: 0,
+      failedFileCount: 0,
+      files: [],
+      failures: [],
+    };
+
+    expect(serializeAnalyzeJson(buildAnalyzeJsonOutput(emptyAnalysis))).toBe(
+      [
+        '{',
+        '  "schemaVersion": "1",',
+        '  "command": "analyze",',
+        '  "repository": {',
+        '    "rootPath": "/repository"',
+        '  },',
+        '  "summary": {',
+        '    "scannedFileCount": 0,',
+        '    "parsedFileCount": 0,',
+        '    "skippedFileCount": 0,',
+        '    "failedFileCount": 0,',
+        '    "filesWithSyntaxErrors": 0,',
+        '    "symbolCount": 0,',
+        '    "importCount": 0,',
+        '    "exportCount": 0,',
+        '    "symbolsByKind": {',
+        '      "function": 0,',
+        '      "class": 0,',
+        '      "method": 0,',
+        '      "constructor": 0,',
+        '      "interface": 0,',
+        '      "type-alias": 0,',
+        '      "enum": 0,',
+        '      "variable": 0',
+        '    }',
+        '  },',
+        '  "analysis": {',
+        '    "files": [],',
+        '    "failures": []',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+  });
+});
+
 function createDependencies(): CliDependencies {
   const times = [1_000, 1_812];
   return {
+    analyze: vi.fn(async () => analysis),
     currentDirectory: vi.fn(() => '/current'),
+    fileSystem: new NodeRepositoryFileSystem(),
     nowMilliseconds: vi.fn(() => times.shift() ?? 1_812),
     scan: vi.fn(async () => scan),
     writeError: vi.fn(),
     writeOutput: vi.fn(),
   };
+}
+
+function getWrittenOutput(dependencies: CliDependencies): string {
+  const call = vi.mocked(dependencies.writeOutput).mock.calls[0];
+  const output = call?.[0];
+  if (output === undefined) {
+    throw new Error('Expected CLI output to be written.');
+  }
+  return output;
 }
 
 function createFile(

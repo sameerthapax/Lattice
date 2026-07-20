@@ -2,8 +2,9 @@
 
 An AI-powered repository knowledge layer that builds a living wiki, dependency map, and knowledge graph for developers and coding agents.
 
-> **Status:** Early development. Deterministic repository scanning is implemented;
-> parsing and knowledge generation remain planned.
+> **Status:** Early development. Deterministic repository scanning and source
+> analysis are implemented; cross-file resolution and knowledge generation remain
+> planned.
 
 ## Vision
 
@@ -34,10 +35,13 @@ npm install
 
 ## Current capabilities
 
-Lattice can scan a local repository without modifying it. The scanner recursively
+Lattice can scan and analyze a local repository without modifying it. The scanner recursively
 discovers text source files, applies hardcoded ignores plus `.gitignore` and
 `.latticeignore`, skips binary files and files larger than 10 MiB, detects supported
-languages by extension, and computes stable path IDs and content hashes.
+languages by extension, and computes stable path IDs and content hashes. The parser
+then verifies those hashes and extracts language-independent symbols, static ES
+module imports, exports, and recoverable syntax diagnostics from TypeScript, TSX,
+JavaScript, and JSX.
 
 Build the CLI and run a scan:
 
@@ -52,8 +56,67 @@ An explicit repository path is also supported:
 lattice index path/to/repository
 ```
 
+Analyze the current directory or an explicit repository path:
+
+```sh
+lattice analyze .
+lattice analyze path/to/repository
+```
+
+For deterministic machine-readable parser output, add `--json` with or without an
+explicit path:
+
+```sh
+lattice analyze . --json
+lattice analyze --json
+```
+
+The JSON schema version is currently `1`. It contains the analysis summary, files,
+symbols, imports, exports, diagnostics, and isolated failures. Source code is not
+included, and paths in file records are repository-relative. Analysis timestamps
+and command duration are intentionally omitted so unchanged inputs produce stable
+output.
+
+For example, inspect extracted symbols with `jq`:
+
+```sh
+lattice analyze . --json | jq '.analysis.files[] | {
+  path: .relativePath,
+  symbols: .symbols
+}'
+```
+
+Example output:
+
+```text
+Repository analyzed successfully
+Files scanned: 167
+Files parsed: 36
+Files skipped: 131
+Parse failures: 0
+Symbols
+Functions: 42
+Classes: 8
+Methods: 31
+Constructors: 8
+Interfaces: 15
+Type aliases: 11
+Enums: 2
+Variables: 19
+Imports: 94
+Exports: 57
+Files with syntax errors: 1
+Duration: 0.12s
+```
+
 When working directly from a checkout without installing the package executable,
-use `node dist/apps/cli/main.js index .` after building.
+use `node dist/apps/cli/main.js index .` or
+`node dist/apps/cli/main.js analyze .` after building.
+
+Analysis is syntax-level and deterministic; it does not claim compiler-level
+semantic understanding. Import resolution, module and call-graph edges, type
+resolution, persistence, knowledge generation, semantic search, and AI assistance
+remain planned.
 
 ## Development
 

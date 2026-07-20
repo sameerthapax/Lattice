@@ -19,6 +19,11 @@ Most product behavior is not implemented yet. Keep initialization work separate 
 - Separate pure domain logic from I/O.
 - Use dependency injection at integration boundaries.
 - Prefer deterministic analysis before LLM inference.
+- Deterministic syntax extraction must precede semantic or LLM-assisted interpretation.
+- Keep Tree-sitter-specific types internal to the parser boundary.
+- Partial syntax errors must not invalidate an otherwise analyzable repository.
+- Machine-readable CLI output must use explicit versioned DTOs rather than blindly serializing domain models.
+- Successful JSON commands must emit only JSON on stdout and omit nondeterministic timestamps and durations.
 - Treat LLM output as untrusted input and validate it.
 - Preserve evidence and provenance for generated knowledge.
 - Make incremental operations idempotent.
