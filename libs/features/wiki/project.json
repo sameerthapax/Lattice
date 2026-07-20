@@ -1,0 +1,26 @@
+{
+  "name": "wiki",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/features/wiki/src",
+  "projectType": "library",
+  "tags": ["scope:feature", "type:feature"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/features/wiki"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/features/wiki",
+        "main": "libs/features/wiki/src/index.ts",
+        "tsConfig": "libs/features/wiki/tsconfig.lib.json",
+        "assets": ["libs/features/wiki/*.md"]
+      }
+    }
+  }
+}

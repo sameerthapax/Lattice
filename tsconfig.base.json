@@ -1,0 +1,38 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": ["ES2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@lattice/core-parser": ["./libs/core/parser/src/index.ts"],
+      "@lattice/core-indexer": ["./libs/core/indexer/src/index.ts"],
+      "@lattice/core-analyzer": ["./libs/core/analyzer/src/index.ts"],
+      "@lattice/core-knowledge": ["./libs/core/knowledge/src/index.ts"],
+      "@lattice/core-graph": ["./libs/core/graph/src/index.ts"],
+      "@lattice/database": ["./libs/data-access/database/src/index.ts"],
+      "@lattice/git": ["./libs/data-access/git/src/index.ts"],
+      "@lattice/filesystem": ["./libs/data-access/filesystem/src/index.ts"],
+      "@lattice/wiki": ["./libs/features/wiki/src/index.ts"],
+      "@lattice/search": ["./libs/features/search/src/index.ts"],
+      "@lattice/context-builder": [
+        "./libs/features/context-builder/src/index.ts"
+      ],
+      "@lattice/llm": ["./libs/integrations/llm/src/index.ts"],
+      "@lattice/mcp": ["./libs/integrations/mcp/src/index.ts"],
+      "@lattice/types": ["./libs/shared/types/src/index.ts"],
+      "@lattice/utils": ["./libs/shared/utils/src/index.ts"],
+      "@lattice/config": ["./libs/shared/config/src/index.ts"]
+    },
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022"
+  }
+}

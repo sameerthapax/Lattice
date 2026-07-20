@@ -1,0 +1,26 @@
+{
+  "name": "parser",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/core/parser/src",
+  "projectType": "library",
+  "tags": ["scope:core", "type:domain"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/core/parser"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/core/parser",
+        "main": "libs/core/parser/src/index.ts",
+        "tsConfig": "libs/core/parser/tsconfig.lib.json",
+        "assets": ["libs/core/parser/*.md"]
+      }
+    }
+  }
+}

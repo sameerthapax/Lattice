@@ -1,0 +1,26 @@
+{
+  "name": "knowledge",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/core/knowledge/src",
+  "projectType": "library",
+  "tags": ["scope:core", "type:domain"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/core/knowledge"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/core/knowledge",
+        "main": "libs/core/knowledge/src/index.ts",
+        "tsConfig": "libs/core/knowledge/tsconfig.lib.json",
+        "assets": ["libs/core/knowledge/*.md"]
+      }
+    }
+  }
+}

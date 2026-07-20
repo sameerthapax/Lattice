@@ -1,0 +1,26 @@
+{
+  "name": "analyzer",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/core/analyzer/src",
+  "projectType": "library",
+  "tags": ["scope:core", "type:domain"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/core/analyzer"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/core/analyzer",
+        "main": "libs/core/analyzer/src/index.ts",
+        "tsConfig": "libs/core/analyzer/tsconfig.lib.json",
+        "assets": ["libs/core/analyzer/*.md"]
+      }
+    }
+  }
+}

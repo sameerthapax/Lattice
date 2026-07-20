@@ -1,0 +1,6 @@
+.next
+coverage
+dist
+node_modules
+.nx
+apps/web/next-env.d.ts

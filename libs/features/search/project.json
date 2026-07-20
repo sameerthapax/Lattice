@@ -1,0 +1,26 @@
+{
+  "name": "search",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/features/search/src",
+  "projectType": "library",
+  "tags": ["scope:feature", "type:feature"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/features/search"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/features/search",
+        "main": "libs/features/search/src/index.ts",
+        "tsConfig": "libs/features/search/tsconfig.lib.json",
+        "assets": ["libs/features/search/*.md"]
+      }
+    }
+  }
+}

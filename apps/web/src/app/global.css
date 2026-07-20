@@ -1,0 +1,33 @@
+:root {
+  color: #1f2933;
+  background: #f7f7f4;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 6rem);
+  letter-spacing: -0.06em;
+}
+
+p {
+  margin: 1rem 0 0;
+  color: #52606d;
+  font-size: 1.125rem;
+}

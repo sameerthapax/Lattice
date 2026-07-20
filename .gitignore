@@ -22,6 +22,9 @@ lib-cov
 coverage
 *.lcov
 
+# Nx local cache and workspace data
+.nx/
+
 # nyc test coverage
 .nyc_output
 
@@ -77,6 +80,7 @@ web_modules/
 # Next.js build output
 .next
 out
+dist/
 
 # Nuxt.js build / generate output
 .nuxt
@@ -124,6 +128,10 @@ dist
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
 
 # pnpm
 .pnpm-store
@@ -141,3 +149,20 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local persistence and future vector indexes
+*.sqlite
+*.sqlite3
+*.db
+.lancedb/
+lancedb/
+
+# .lattice/ contains local generated repository knowledge and indexes; do not commit it by default.
+.lattice/
+
+# Temporary copies of indexed repository content
+.lattice-tmp/
+tmp/indexed-repositories/
+
+# Nx and application build-time temporary files
+/tmp/

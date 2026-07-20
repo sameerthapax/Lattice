@@ -1,0 +1,26 @@
+{
+  "name": "database",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/data-access/database/src",
+  "projectType": "library",
+  "tags": ["scope:data-access", "type:data-access"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/data-access/database"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/data-access/database",
+        "main": "libs/data-access/database/src/index.ts",
+        "tsConfig": "libs/data-access/database/tsconfig.lib.json",
+        "assets": ["libs/data-access/database/*.md"]
+      }
+    }
+  }
+}

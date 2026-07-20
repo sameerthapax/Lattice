@@ -1,0 +1,26 @@
+{
+  "name": "llm",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/integrations/llm/src",
+  "projectType": "library",
+  "tags": ["scope:integration", "type:integration"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/integrations/llm"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/integrations/llm",
+        "main": "libs/integrations/llm/src/index.ts",
+        "tsConfig": "libs/integrations/llm/tsconfig.lib.json",
+        "assets": ["libs/integrations/llm/*.md"]
+      }
+    }
+  }
+}
