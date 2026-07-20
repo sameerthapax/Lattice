@@ -15,7 +15,10 @@ export default [
         {
           enforceBuildableLibDependency: true,
           banTransitiveDependencies: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          allow: [
+            '^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$',
+            '^@lattice/filesystem$',
+          ],
           depConstraints: [
             {
               sourceTag: 'scope:app',

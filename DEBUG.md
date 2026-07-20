@@ -32,6 +32,48 @@ Add an entry when an investigation reveals a non-obvious root cause, a recurring
 
 ## Known issues
 
+### 2026-07-20 — Vitest did not resolve workspace TypeScript aliases
+
+#### Context
+
+The scanner introduced the first tested cross-project imports through
+`@lattice/filesystem` and `@lattice/core-indexer`.
+
+#### Symptoms
+
+Indexer and CLI tests failed during module loading with `Cannot find package`
+errors, although TypeScript builds resolved the same aliases successfully.
+
+#### Reproduction
+
+Run the indexer or CLI Vitest target when its test imports a workspace alias and no
+Vitest resolution configuration exists.
+
+#### Investigation
+
+The aliases were present in `tsconfig.base.json`, and Nx TypeScript builds passed.
+Vitest was invoked from each project directory and did not translate those
+TypeScript path entries at runtime.
+
+#### Root cause
+
+The workspace had no Vitest alias resolution for cross-project source imports.
+
+#### Fix
+
+Add small project-local Vitest configurations mapping only the workspace aliases
+used by each tested project. No package was added.
+
+#### Verification
+
+The targeted indexer and CLI runs loaded their public workspace imports and passed
+all 38 tests.
+
+#### Prevention and follow-up
+
+When a project first tests a cross-project public import, configure Vitest to map
+that alias. Keep test imports on public `src/index.ts` entry points.
+
 ### 2026-07-20 — Next.js transitive PostCSS audit advisory
 
 #### Context
