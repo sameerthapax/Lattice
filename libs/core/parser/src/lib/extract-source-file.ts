@@ -475,7 +475,7 @@ function extractExports(
           specifier,
           source === null ? 'named' : 're-export',
           exportedName,
-          source === null ? localName : null,
+          localName,
           source,
           symbol?.id ?? null,
           statementTypeOnly || hasToken(specifier, 'type'),

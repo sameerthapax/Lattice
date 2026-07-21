@@ -1,6 +1,13 @@
 import {
+  resolveRepositoryAnalysis,
+  ResolverInputError,
+  type ResolvedRepositoryAnalysis,
+  type WorkspaceModuleAlias,
+} from '@lattice/core-analyzer';
+import {
   RepositoryScanError,
   scanRepository,
+  SupportedLanguage,
   type RepositoryScan,
 } from '@lattice/core-indexer';
 import {
@@ -19,12 +26,18 @@ import {
   formatAnalyzeSummary,
   serializeAnalyzeJson,
 } from './analyze-output';
+import { loadWorkspaceAliases } from './workspace-aliases';
 
 export interface CliDependencies {
   readonly currentDirectory: () => string;
   readonly nowMilliseconds: () => number;
   readonly scan: typeof scanRepository;
   readonly analyze: typeof analyzeRepository;
+  readonly resolve: typeof resolveRepositoryAnalysis;
+  readonly loadAliases: (
+    rootPath: string,
+    fileSystem: RepositoryFileSystem,
+  ) => Promise<readonly WorkspaceModuleAlias[]>;
   readonly fileSystem: RepositoryFileSystem;
   readonly writeError: (message: string) => void;
   readonly writeOutput: (message: string) => void;
@@ -34,8 +47,10 @@ const defaultDependencies: CliDependencies = {
   analyze: analyzeRepository,
   currentDirectory: () => process.cwd(),
   fileSystem: new NodeRepositoryFileSystem(),
+  loadAliases: loadWorkspaceAliases,
   nowMilliseconds: () => performance.now(),
   scan: scanRepository,
+  resolve: resolveRepositoryAnalysis,
   writeError: (message: string): void => console.error(message),
   writeOutput: (message: string): void => {
     process.stdout.write(message);
@@ -69,14 +84,22 @@ export async function runCli(
         scan,
         fileSystem: dependencies.fileSystem,
       });
+      const resolution = dependencies.resolve({
+        scan,
+        analysis,
+        workspaceAliases: await dependencies.loadAliases(
+          scan.rootPath,
+          dependencies.fileSystem,
+        ),
+      });
       if (json) {
         dependencies.writeOutput(
-          serializeAnalyzeJson(buildAnalyzeJsonOutput(analysis)),
+          serializeAnalyzeJson(buildAnalyzeJsonOutput(analysis, resolution)),
         );
       } else {
         const durationSeconds = elapsedSeconds(startTime, dependencies);
         dependencies.writeOutput(
-          `${formatAnalyzeSummary(buildAnalyzeSummary(analysis), durationSeconds)}\n`,
+          `${formatAnalyzeSummary(buildAnalyzeSummary(analysis, resolution), durationSeconds)}\n`,
         );
       }
     } else {
@@ -87,7 +110,8 @@ export async function runCli(
   } catch (error: unknown) {
     dependencies.writeError(
       error instanceof RepositoryScanError ||
-        error instanceof ParserInitializationError
+        error instanceof ParserInitializationError ||
+        error instanceof ResolverInputError
         ? error.message
         : command === 'analyze'
           ? 'Repository analysis failed unexpectedly.'
@@ -100,8 +124,38 @@ export async function runCli(
 export function formatAnalysisSummary(
   analysis: RepositoryAnalysis,
   durationSeconds: number,
+  resolution: ResolvedRepositoryAnalysis = resolveRepositoryAnalysis({
+    scan: {
+      rootPath: analysis.rootPath,
+      scannedAt: analysis.analyzedAt,
+      totalFiles: analysis.files.length,
+      totalDirectories: 0,
+      totalIgnoredEntries: 0,
+      files: analysis.files.map((file) => ({
+        id: file.fileId,
+        relativePath: file.relativePath,
+        absolutePath: `${analysis.rootPath}/${file.relativePath}`,
+        extension: null,
+        language:
+          file.language === 'TypeScript'
+            ? SupportedLanguage.TypeScript
+            : file.language === 'TSX'
+              ? SupportedLanguage.TSX
+              : file.language === 'JavaScript'
+                ? SupportedLanguage.JavaScript
+                : SupportedLanguage.JSX,
+        sizeBytes: 0,
+        contentHash: file.contentHash,
+        lastModified: analysis.analyzedAt,
+      })),
+    },
+    analysis,
+  }),
 ): string {
-  return formatAnalyzeSummary(buildAnalyzeSummary(analysis), durationSeconds);
+  return formatAnalyzeSummary(
+    buildAnalyzeSummary(analysis, resolution),
+    durationSeconds,
+  );
 }
 
 export function formatScanSummary(

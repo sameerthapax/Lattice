@@ -2,9 +2,8 @@
 
 An AI-powered repository knowledge layer that builds a living wiki, dependency map, and knowledge graph for developers and coding agents.
 
-> **Status:** Early development. Deterministic repository scanning and source
-> analysis are implemented; cross-file resolution and knowledge generation remain
-> planned.
+> **Status:** Early development. Deterministic repository scanning, syntax analysis,
+> and cross-file module resolution are implemented; knowledge generation remains planned.
 
 ## Vision
 
@@ -41,7 +40,9 @@ discovers text source files, applies hardcoded ignores plus `.gitignore` and
 languages by extension, and computes stable path IDs and content hashes. The parser
 then verifies those hashes and extracts language-independent symbols, static ES
 module imports, exports, and recoverable syntax diagnostics from TypeScript, TSX,
-JavaScript, and JSX.
+JavaScript, and JSX. Milestone 3 resolves internal relative and configured workspace
+imports, classifies external packages, connects named/default imports and re-exports
+to exported symbols, reports unresolved relationships, and detects dependency cycles.
 
 Build the CLI and run a scan:
 
@@ -71,8 +72,9 @@ lattice analyze . --json
 lattice analyze --json
 ```
 
-The JSON schema version is currently `1`. It contains the analysis summary, files,
-symbols, imports, exports, diagnostics, and isolated failures. Source code is not
+The JSON schema version is `2`. It preserves scanner/parser output and adds a
+`resolution` section containing modules, internal and external dependencies, symbol
+bindings, unresolved dependencies, and cycles. Source code is not
 included, and paths in file records are repository-relative. Analysis timestamps
 and command duration are intentionally omitted so unchanged inputs produce stable
 output.
@@ -106,6 +108,13 @@ Variables: 19
 Imports: 94
 Exports: 57
 Files with syntax errors: 1
+Module resolution
+Internal dependencies: 48
+External dependencies: 19
+Resolved symbol bindings: 73
+Unresolved dependencies: 2
+Dependency cycles: 1
+Use --json to inspect unresolved dependencies.
 Duration: 0.12s
 ```
 
@@ -114,9 +123,9 @@ use `node dist/apps/cli/main.js index .` or
 `node dist/apps/cli/main.js analyze .` after building.
 
 Analysis is syntax-level and deterministic; it does not claim compiler-level
-semantic understanding. Import resolution, module and call-graph edges, type
-resolution, persistence, knowledge generation, semantic search, and AI assistance
-remain planned.
+semantic understanding. CommonJS, dynamic imports, package.json export conditions,
+TypeScript compiler resolution, call graphs, type graphs, persistence, knowledge
+generation, semantic search, and AI assistance remain unimplemented.
 
 ## Development
 

@@ -521,14 +521,14 @@ describe('export extraction', () => {
       {
         kind: 're-export',
         exportedName: 'remote',
-        localName: null,
+        localName: 'remote',
         source: './remote',
         typeOnly: false,
       },
       {
         kind: 're-export',
         exportedName: 'Shape',
-        localName: null,
+        localName: 'Shape',
         source: './shape',
         typeOnly: true,
       },

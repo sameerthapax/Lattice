@@ -81,7 +81,8 @@ Move to a newer Node binding only when both maintained grammars declare support.
 #### Context
 
 The scanner introduced the first tested cross-project imports through
-`@lattice/filesystem` and `@lattice/core-indexer`.
+`@lattice/filesystem` and `@lattice/core-indexer`. Milestone 3 reproduced the same
+failure when the previously empty analyzer first imported parser/indexer publicly.
 
 #### Symptoms
 
@@ -110,8 +111,8 @@ used by each tested project. No package was added.
 
 #### Verification
 
-The targeted indexer and CLI runs loaded their public workspace imports and passed
-all 38 tests.
+The targeted analyzer and CLI runs loaded their public workspace imports after the
+analyzer alias mappings were added. The complete suite passed 107 tests.
 
 #### Prevention and follow-up
 

@@ -21,6 +21,10 @@ Most product behavior is not implemented yet. Keep initialization work separate 
 - Prefer deterministic analysis before LLM inference.
 - Deterministic syntax extraction must precede semantic or LLM-assisted interpretation.
 - Keep Tree-sitter-specific types internal to the parser boundary.
+- Keep parsing and module resolution as separate stages; core analyzers must not traverse the filesystem.
+- Treat unresolved relationships as structured data rather than repository-wide failures.
+- Prefer explicit local and named exports over export-all relationships.
+- Make intentional schema-version changes when a JSON contract changes.
 - Partial syntax errors must not invalidate an otherwise analyzable repository.
 - Machine-readable CLI output must use explicit versioned DTOs rather than blindly serializing domain models.
 - Successful JSON commands must emit only JSON on stdout and omit nondeterministic timestamps and durations.

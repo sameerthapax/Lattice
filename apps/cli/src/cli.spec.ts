@@ -1,3 +1,4 @@
+import { resolveRepositoryAnalysis } from '@lattice/core-analyzer';
 import {
   RepositoryNotFoundError,
   SupportedLanguage,
@@ -116,6 +117,8 @@ const analysis: RepositoryAnalysis = {
   failures: [],
 };
 
+const resolution = resolveRepositoryAnalysis({ scan, analysis });
+
 describe('runCli', () => {
   it('indexes the current directory when no path is supplied', async () => {
     const dependencies = createDependencies();
@@ -171,7 +174,7 @@ describe('runCli', () => {
     const output = getWrittenOutput(dependencies);
     expect(() => JSON.parse(output)).not.toThrow();
     expect(JSON.parse(output)).toMatchObject({
-      schemaVersion: '1',
+      schemaVersion: '2',
       command: 'analyze',
       summary: {
         scannedFileCount: 3,
@@ -442,9 +445,69 @@ describe('formatAnalysisSummary', () => {
         'Imports: 1',
         'Exports: 1',
         'Files with syntax errors: 1',
+        'Module resolution',
+        'Internal dependencies: 0',
+        'External dependencies: 0',
+        'Resolved symbol bindings: 0',
+        'Unresolved dependencies: 1',
+        'Dependency cycles: 0',
+        'Use --json to inspect unresolved dependencies.',
         'Duration: 0.81s',
       ].join('\n'),
     );
+  });
+});
+
+describe('module resolution output', () => {
+  it('prints counts and omits the unresolved hint when resolution is complete', () => {
+    const empty = resolveRepositoryAnalysis({
+      scan: { ...scan, totalFiles: 0, files: [] },
+      analysis: {
+        ...analysis,
+        scannedFileCount: 0,
+        parsedFileCount: 0,
+        skippedFileCount: 0,
+        files: [],
+      },
+    });
+    const output = formatAnalysisSummary(
+      {
+        ...analysis,
+        scannedFileCount: 0,
+        parsedFileCount: 0,
+        skippedFileCount: 0,
+        files: [],
+      },
+      0,
+      empty,
+    );
+    expect(output).toContain('Unresolved dependencies: 0');
+    expect(output).not.toContain('Use --json');
+  });
+
+  it('includes the schema-version-2 resolution section and fixed summary field order', async () => {
+    const dependencies = createDependencies();
+    await runCli(['analyze', '--json'], dependencies);
+    const parsed = JSON.parse(getWrittenOutput(dependencies)) as {
+      readonly resolution: Record<string, unknown>;
+      readonly summary: Record<string, unknown>;
+    };
+    expect(Object.keys(parsed.resolution)).toEqual([
+      'modules',
+      'dependencies',
+      'externalDependencies',
+      'symbolBindings',
+      'unresolvedDependencies',
+      'cycles',
+    ]);
+    expect(Object.keys(parsed.summary).slice(-6)).toEqual([
+      'internalDependencyCount',
+      'externalDependencyCount',
+      'resolvedSymbolBindingCount',
+      'unresolvedDependencyCount',
+      'cycleCount',
+      'symbolsByKind',
+    ]);
   });
 });
 
@@ -461,10 +524,18 @@ describe('serializeAnalyzeJson', () => {
       failures: [],
     };
 
-    expect(serializeAnalyzeJson(buildAnalyzeJsonOutput(emptyAnalysis))).toBe(
+    const emptyResolution = resolveRepositoryAnalysis({
+      scan: { ...scan, totalFiles: 0, files: [] },
+      analysis: emptyAnalysis,
+    });
+    expect(
+      serializeAnalyzeJson(
+        buildAnalyzeJsonOutput(emptyAnalysis, emptyResolution),
+      ),
+    ).toBe(
       [
         '{',
-        '  "schemaVersion": "1",',
+        '  "schemaVersion": "2",',
         '  "command": "analyze",',
         '  "repository": {',
         '    "rootPath": "/repository"',
@@ -478,6 +549,11 @@ describe('serializeAnalyzeJson', () => {
         '    "symbolCount": 0,',
         '    "importCount": 0,',
         '    "exportCount": 0,',
+        '    "internalDependencyCount": 0,',
+        '    "externalDependencyCount": 0,',
+        '    "resolvedSymbolBindingCount": 0,',
+        '    "unresolvedDependencyCount": 0,',
+        '    "cycleCount": 0,',
         '    "symbolsByKind": {',
         '      "function": 0,',
         '      "class": 0,',
@@ -492,6 +568,14 @@ describe('serializeAnalyzeJson', () => {
         '  "analysis": {',
         '    "files": [],',
         '    "failures": []',
+        '  },',
+        '  "resolution": {',
+        '    "modules": [],',
+        '    "dependencies": [],',
+        '    "externalDependencies": [],',
+        '    "symbolBindings": [],',
+        '    "unresolvedDependencies": [],',
+        '    "cycles": []',
         '  }',
         '}',
         '',
@@ -506,8 +590,10 @@ function createDependencies(): CliDependencies {
     analyze: vi.fn(async () => analysis),
     currentDirectory: vi.fn(() => '/current'),
     fileSystem: new NodeRepositoryFileSystem(),
+    loadAliases: vi.fn(async () => []),
     nowMilliseconds: vi.fn(() => times.shift() ?? 1_812),
     scan: vi.fn(async () => scan),
+    resolve: vi.fn(() => resolution),
     writeError: vi.fn(),
     writeOutput: vi.fn(),
   };

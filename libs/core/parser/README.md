@@ -69,8 +69,9 @@ incompatible peer versions.
 
 ## Current limitations
 
-The output is syntactic, not compiler-semantic. Import-path resolution, CommonJS
-`require`, dynamic `import()`, nested lexical scope modeling, call graphs, type
-resolution, persistence, knowledge generation, and AI interpretation are planned
-downstream work. No syntax trees or source contents are persisted in the public
-result.
+The output is syntactic, not compiler-semantic. Cross-file static ES-module
+resolution belongs to `@lattice/core-analyzer`; the parser only preserves the
+specifier and import/export names needed by that stage. CommonJS `require`, dynamic
+`import()`, nested lexical scope modeling, call graphs, type resolution, persistence,
+knowledge generation, and AI interpretation remain out of scope. No syntax trees or
+source contents are persisted in the public result.

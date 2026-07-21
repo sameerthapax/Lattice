@@ -2,7 +2,7 @@
 
 ## 1. System purpose
 
-Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. Deterministic repository scanning and JavaScript/TypeScript source parsing are implemented; cross-file resolution and knowledge generation remain planned.
+Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. Deterministic repository scanning, JavaScript/TypeScript source parsing, and cross-file module resolution are implemented; knowledge generation remains planned.
 
 ## 2. Current workspace structure
 
@@ -37,7 +37,7 @@ Applications are entry points and composition roots. Reusable logic belongs in l
 
 - **parser:** Consumes repository scans, verifies scanned content hashes through the injected filesystem boundary, parses TypeScript, TSX, JavaScript, and JSX with Tree-sitter, and produces the language-independent repository-analysis model. It owns deterministic symbol/import/export extraction, stable structural IDs, syntax diagnostics, and per-file failure isolation. Tree-sitter types remain private to this boundary.
 - **indexer:** Validates repository roots and deterministically describes source files. It owns ignore policy, binary and size filtering, extension-based language detection, stable path IDs, scan models, and repository-scanning domain errors. Parsing is downstream; incremental persistence is not implemented.
-- **analyzer:** Deterministic and future AI-assisted analysis.
+- **analyzer:** Consumes scan and parser metadata in memory and deterministically resolves static ES-module targets, dependency edges, effective exports, symbol bindings, external references, unresolved relationships, and cycles. It performs no parsing or filesystem traversal.
 - **knowledge:** Knowledge pages, claims, summaries, and links.
 - **graph:** Graph entities, relationships, and traversal.
 
@@ -115,7 +115,9 @@ Tree-sitter Parser
     ↓
 Language-independent Repository Analysis
     ↓
-Cross-file relationship resolution — planned
+Module Resolver
+    ↓
+Resolved Module and Symbol Relationships
     ↓
 Knowledge Builder — planned
 ```
@@ -138,8 +140,22 @@ start position. This is stable for repeated unchanged analyses; moving a declara
 may change its ID. All repository-derived collections are explicitly sorted.
 Recoverable syntax errors produce diagnostics without discarding other extracted
 structure. Read, hash-consistency, or unusable-parse failures affect only their file.
-Cross-file resolution is deferred because it requires module-resolution policy and
-must not be conflated with deterministic per-file syntax extraction.
+The analyzer resolves only files present in the scan and parsed analysis. Relative
+candidates use a fixed exact/extension/index order, including documented `.js` to
+TypeScript and `.jsx` to TSX source mappings. Root TypeScript path aliases are read
+by the CLI composition boundary and injected; the analyzer performs no I/O.
+Unmatched packages are external and are never inspected.
+
+One internal edge is retained per source file, target file, dependency kind,
+specifier, and type-only state. Named/default imports and named re-exports bind to
+effective exports and originating symbols. Export chains are cycle-protected;
+`export *` excludes default, explicit exports take precedence, and duplicate
+export-all names are ambiguous rather than arbitrarily selected. Dependency cycles
+are canonicalized and nonfatal. Missing modules/exports and unsupported specifiers
+are stable reason-coded data. IDs hash stable structural inputs with SHA-256 and all
+public collections are explicitly sorted. Paths or declarations moving can change
+identity. Call graphs and type semantics remain deferred because they require
+semantic analysis beyond deterministic syntax and module relationships.
 
 The CLI JSON serialization boundary is separate from the parser domain model. It
 constructs an explicit schema-versioned DTO, copies supported fields intentionally,
@@ -154,7 +170,7 @@ consume repository scans yet.
 
 > **Planned — not implemented.**
 
-Repository analyses will feed planned cross-file resolution, knowledge, and graph libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
+Resolved repository analyses will feed planned knowledge and graph libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
 
 ## 9. Architectural decision log
 
@@ -174,6 +190,10 @@ Repository analyses will feed planned cross-file resolution, knowledge, and grap
 | 2026-07-20 | Initially parse only JavaScript, JSX, TypeScript, and TSX                            | Accepted | A narrow related-language scope provides useful structure while keeping extraction rules explicit and testable.                                                    |
 | 2026-07-20 | Return a language-independent repository-analysis model                              | Accepted | Downstream components depend on stable source concepts rather than Tree-sitter node types or grammar details.                                                      |
 | 2026-07-20 | Isolate syntax diagnostics and hard failures per file                                | Accepted | Partial or changing files must not invalidate useful deterministic analysis from the rest of a repository.                                                         |
+| 2026-07-20 | Keep deterministic module resolution as a separate analyzer stage                    | Accepted | Resolution consumes scanner/parser metadata without reparsing or filesystem traversal and keeps syntax extraction focused.                                         |
+| 2026-07-20 | Version resolved CLI analysis output as schema 2                                     | Accepted | Adding module, dependency, binding, unresolved, and cycle records materially changes the machine-readable contract.                                                |
+| 2026-07-20 | Represent unresolved relationships structurally                                      | Accepted | Missing and ambiguous relationships are normal repository facts and must not discard otherwise useful analysis.                                                    |
+| 2026-07-20 | Give explicit exports precedence and reject ambiguous export-all names               | Accepted | Deterministic consumers must never receive an arbitrary target when multiple star exports expose the same name.                                                    |
 
 ## 10. Documentation-update rules
 

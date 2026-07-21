@@ -15,11 +15,16 @@ export interface AnalyzeSummary {
   readonly symbolCount: number;
   readonly importCount: number;
   readonly exportCount: number;
+  readonly internalDependencyCount: number;
+  readonly externalDependencyCount: number;
+  readonly resolvedSymbolBindingCount: number;
+  readonly unresolvedDependencyCount: number;
+  readonly cycleCount: number;
   readonly symbolsByKind: Readonly<Record<SourceSymbolKind, number>>;
 }
 
 export interface AnalyzeJsonOutput {
-  readonly schemaVersion: '1';
+  readonly schemaVersion: '2';
   readonly command: 'analyze';
   readonly repository: {
     readonly rootPath: string;
@@ -29,7 +34,22 @@ export interface AnalyzeJsonOutput {
     readonly files: readonly AnalyzeJsonFile[];
     readonly failures: readonly AnalyzeJsonFailure[];
   };
+  readonly resolution: {
+    readonly modules: readonly ResolvedModuleDto[];
+    readonly dependencies: readonly ModuleDependencyDto[];
+    readonly externalDependencies: readonly ExternalModuleDependencyDto[];
+    readonly symbolBindings: readonly SymbolBindingDto[];
+    readonly unresolvedDependencies: readonly UnresolvedDependencyDto[];
+    readonly cycles: readonly ModuleCycleDto[];
+  };
 }
+
+export type ResolvedModuleDto = ResolvedModule;
+export type ModuleDependencyDto = ModuleDependency;
+export type ExternalModuleDependencyDto = ExternalModuleDependency;
+export type SymbolBindingDto = SymbolBinding;
+export type UnresolvedDependencyDto = UnresolvedDependency;
+export type ModuleCycleDto = ModuleCycle;
 
 export interface AnalyzeJsonLocation {
   readonly startLine: number;
@@ -122,6 +142,7 @@ const SYMBOL_LABELS: Readonly<Record<SourceSymbolKind, string>> = {
 
 export function buildAnalyzeSummary(
   analysis: RepositoryAnalysis,
+  resolution: ResolvedRepositoryAnalysis,
 ): AnalyzeSummary {
   const symbolsByKind: Record<SourceSymbolKind, number> = {
     function: 0,
@@ -163,6 +184,11 @@ export function buildAnalyzeSummary(
     symbolCount,
     importCount,
     exportCount,
+    internalDependencyCount: resolution.dependencies.length,
+    externalDependencyCount: resolution.externalDependencies.length,
+    resolvedSymbolBindingCount: resolution.symbolBindings.length,
+    unresolvedDependencyCount: resolution.unresolvedDependencies.length,
+    cycleCount: resolution.cycles.length,
     symbolsByKind,
   };
 }
@@ -184,20 +210,30 @@ export function formatAnalyzeSummary(
     `Imports: ${summary.importCount}`,
     `Exports: ${summary.exportCount}`,
     `Files with syntax errors: ${summary.filesWithSyntaxErrors}`,
+    'Module resolution',
+    `Internal dependencies: ${summary.internalDependencyCount}`,
+    `External dependencies: ${summary.externalDependencyCount}`,
+    `Resolved symbol bindings: ${summary.resolvedSymbolBindingCount}`,
+    `Unresolved dependencies: ${summary.unresolvedDependencyCount}`,
+    `Dependency cycles: ${summary.cycleCount}`,
+    ...(summary.unresolvedDependencyCount > 0
+      ? ['Use --json to inspect unresolved dependencies.']
+      : []),
     `Duration: ${durationSeconds.toFixed(2)}s`,
   ].join('\n');
 }
 
 export function buildAnalyzeJsonOutput(
   analysis: RepositoryAnalysis,
+  resolution: ResolvedRepositoryAnalysis,
 ): AnalyzeJsonOutput {
   return {
-    schemaVersion: '1',
+    schemaVersion: '2',
     command: 'analyze',
     repository: {
       rootPath: analysis.rootPath,
     },
-    summary: buildAnalyzeSummary(analysis),
+    summary: buildAnalyzeSummary(analysis, resolution),
     analysis: {
       files: analysis.files.map((file) => ({
         fileId: file.fileId,
@@ -253,6 +289,32 @@ export function buildAnalyzeJsonOutput(
         message: failure.message,
       })),
     },
+    resolution: {
+      modules: resolution.modules.map(copyResolvedModule),
+      dependencies: resolution.dependencies.map((dependency) => ({
+        ...dependency,
+      })),
+      externalDependencies: resolution.externalDependencies.map(
+        (dependency) => ({
+          sourceFileId: dependency.sourceFileId,
+          sourceSpecifier: dependency.sourceSpecifier,
+          typeOnly: dependency.typeOnly,
+          importIds: [...dependency.importIds],
+          exportIds: [...dependency.exportIds],
+        }),
+      ),
+      symbolBindings: resolution.symbolBindings.map((binding) => ({
+        ...binding,
+      })),
+      unresolvedDependencies: resolution.unresolvedDependencies.map(
+        (dependency) => ({ ...dependency }),
+      ),
+      cycles: resolution.cycles.map((cycle) => ({
+        id: cycle.id,
+        fileIds: [...cycle.fileIds],
+        relativePaths: [...cycle.relativePaths],
+      })),
+    },
   };
 }
 
@@ -268,3 +330,26 @@ function copyLocation(location: AnalyzeJsonLocation): AnalyzeJsonLocation {
     endColumn: location.endColumn,
   };
 }
+
+function copyResolvedModule(module: ResolvedModule): ResolvedModuleDto {
+  return {
+    fileId: module.fileId,
+    relativePath: module.relativePath,
+    language: module.language,
+    imports: module.imports.map((item: ResolvedImport) => ({ ...item })),
+    exports: module.exports.map((item: ResolvedExport) => ({ ...item })),
+    incomingDependencyIds: [...module.incomingDependencyIds],
+    outgoingDependencyIds: [...module.outgoingDependencyIds],
+  };
+}
+import type {
+  ExternalModuleDependency,
+  ModuleCycle,
+  ModuleDependency,
+  ResolvedExport,
+  ResolvedImport,
+  ResolvedModule,
+  ResolvedRepositoryAnalysis,
+  SymbolBinding,
+  UnresolvedDependency,
+} from '@lattice/core-analyzer';

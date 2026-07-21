@@ -3,16 +3,12 @@ import { fileURLToPath } from 'node:url';
 
 const workspaceRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../..',
+  '../../..',
 );
 
 export default {
   resolve: {
     alias: {
-      '@lattice/core-analyzer': path.join(
-        workspaceRoot,
-        'libs/core/analyzer/src/index.ts',
-      ),
       '@lattice/core-indexer': path.join(
         workspaceRoot,
         'libs/core/indexer/src/index.ts',
