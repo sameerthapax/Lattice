@@ -2,7 +2,7 @@
 
 ## 1. System purpose
 
-Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. Deterministic repository scanning, JavaScript/TypeScript source parsing, and cross-file module resolution are implemented; knowledge generation remains planned.
+Lattice is a local-first knowledge layer for source-code repositories. Its planned outputs are a living wiki, structural dependency map, knowledge graph, and task-specific context for people and coding agents. Deterministic repository scanning, JavaScript/TypeScript source parsing, cross-file module resolution, and structural knowledge construction are implemented; generated natural-language knowledge remains planned.
 
 ## 2. Current workspace structure
 
@@ -38,7 +38,7 @@ Applications are entry points and composition roots. Reusable logic belongs in l
 - **parser:** Consumes repository scans, verifies scanned content hashes through the injected filesystem boundary, parses TypeScript, TSX, JavaScript, and JSX with Tree-sitter, and produces the language-independent repository-analysis model. It owns deterministic symbol/import/export extraction, stable structural IDs, syntax diagnostics, and per-file failure isolation. Tree-sitter types remain private to this boundary.
 - **indexer:** Validates repository roots and deterministically describes source files. It owns ignore policy, binary and size filtering, extension-based language detection, stable path IDs, scan models, and repository-scanning domain errors. Parsing is downstream; incremental persistence is not implemented.
 - **analyzer:** Consumes scan and parser metadata in memory and deterministically resolves static ES-module targets, dependency edges, effective exports, symbol bindings, external references, unresolved relationships, and cycles. It performs no parsing or filesystem traversal.
-- **knowledge:** Knowledge pages, claims, summaries, and links.
+- **knowledge:** Builds deterministic repository/project/folder/file/symbol nodes, typed relations, public surfaces, project dependencies, and structural metrics from prior-stage results and injected project metadata. It performs no I/O or inference.
 - **graph:** Graph entities, relationships, and traversal.
 
 ### Data access
@@ -113,13 +113,17 @@ Repository Scan
     ↓
 Tree-sitter Parser
     ↓
-Language-independent Repository Analysis
+Repository Analysis
     ↓
 Module Resolver
     ↓
-Resolved Module and Symbol Relationships
+Resolved Repository Analysis
     ↓
-Knowledge Builder — planned
+Knowledge Builder
+    ↓
+Repository Knowledge Model
+    ↓
+Wiki, Context Builder, Search, MCP — planned
 ```
 
 The CLI calls the core indexer, which uses the injected filesystem adapter. The
@@ -157,8 +161,29 @@ public collections are explicitly sorted. Paths or declarations moving can chang
 identity. Call graphs and type semantics remain deferred because they require
 semantic analysis beyond deterministic syntax and module relationships.
 
-The CLI JSON serialization boundary is separate from the parser domain model. It
-constructs an explicit schema-versioned DTO, copies supported fields intentionally,
+The knowledge builder is a separate pure stage above resolution. It creates only
+folders required by scanned files and creates a file node for every retained scan
+record, including unsupported and failed files. Parser symbols retain explicit
+parent links; no feature or semantic-module hierarchy is inferred. The CLI reads
+committed `project.json` metadata and injects plain records. Longest matching project
+root precedence assigns membership, while files outside projects remain valid.
+
+Effective resolved exports define file public symbols. Only configured entry points
+define project public surfaces; the builder never guesses `src/index.ts`. Internal
+file dependencies crossing project boundaries aggregate into project dependencies.
+Typed relations cover containment, membership, declarations, exports, dependencies,
+bindings, explicit symbol nesting, and project dependencies. An orphan is exactly a
+parsed, non-entry-point file with no incoming or outgoing internal dependency.
+
+Knowledge identities use SHA-256 under the versioned `knowledge:v1` namespace, and
+all arrays have explicit deterministic ordering. The builder does not read source or
+workspace configuration because the scanner and composition boundary own I/O.
+Feature inference and natural-language knowledge remain deferred so structural
+evidence exists before generated data.
+
+The CLI JSON serialization boundary is separate from the domain models. Schema 3
+constructs an explicit DTO, preserves analysis and resolution, adds knowledge nodes,
+relations and project dependencies, and copies supported fields intentionally,
 and omits timestamps, durations, source contents, and per-file absolute paths. This
 keeps machine-readable CLI compatibility deliberate without coupling parser model
 evolution directly to an external wire format.
@@ -170,7 +195,7 @@ consume repository scans yet.
 
 > **Planned — not implemented.**
 
-Resolved repository analyses will feed planned knowledge and graph libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
+Repository knowledge will feed planned graph and feature libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
 
 ## 9. Architectural decision log
 
@@ -194,6 +219,11 @@ Resolved repository analyses will feed planned knowledge and graph libraries. Da
 | 2026-07-20 | Version resolved CLI analysis output as schema 2                                     | Accepted | Adding module, dependency, binding, unresolved, and cycle records materially changes the machine-readable contract.                                                |
 | 2026-07-20 | Represent unresolved relationships structurally                                      | Accepted | Missing and ambiguous relationships are normal repository facts and must not discard otherwise useful analysis.                                                    |
 | 2026-07-20 | Give explicit exports precedence and reject ambiguous export-all names               | Accepted | Deterministic consumers must never receive an arbitrary target when multiple star exports expose the same name.                                                    |
+| 2026-07-20 | Build repository hierarchy as a separate deterministic stage                         | Accepted | Keeps structural knowledge reproducible and parsing and resolution focused.                                                                                        |
+| 2026-07-20 | Use explicit injected project metadata instead of folder-name inference              | Accepted | Workspace configuration is authoritative; arbitrary folder naming is not project semantics.                                                                        |
+| 2026-07-20 | Treat configured entry points as the only source of project-public APIs              | Accepted | Exported implementation files are not necessarily package surfaces, so guessed index files would create false public contracts.                                    |
+| 2026-07-20 | Version analyze JSON structural-knowledge output as schema 3                         | Accepted | Knowledge nodes, relations, dependencies, and metrics materially change the machine-readable contract.                                                             |
+| 2026-07-20 | Establish structural knowledge before generated knowledge                            | Accepted | Deterministic evidence and provenance must precede optional natural-language or semantic inference.                                                                |
 
 ## 10. Documentation-update rules
 

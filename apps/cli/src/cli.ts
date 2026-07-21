@@ -16,6 +16,12 @@ import {
   type RepositoryAnalysis,
 } from '@lattice/core-parser';
 import {
+  buildRepositoryKnowledge,
+  KnowledgeBuilderInputError,
+  type RepositoryKnowledge,
+  type WorkspaceProjectDefinition,
+} from '@lattice/core-knowledge';
+import {
   NodeRepositoryFileSystem,
   type RepositoryFileSystem,
 } from '@lattice/filesystem';
@@ -27,6 +33,7 @@ import {
   serializeAnalyzeJson,
 } from './analyze-output';
 import { loadWorkspaceAliases } from './workspace-aliases';
+import { loadWorkspaceProjects } from './workspace-projects';
 
 export interface CliDependencies {
   readonly currentDirectory: () => string;
@@ -38,6 +45,10 @@ export interface CliDependencies {
     rootPath: string,
     fileSystem: RepositoryFileSystem,
   ) => Promise<readonly WorkspaceModuleAlias[]>;
+  readonly loadProjects?: (
+    scan: RepositoryScan,
+    fileSystem: RepositoryFileSystem,
+  ) => Promise<readonly WorkspaceProjectDefinition[]>;
   readonly fileSystem: RepositoryFileSystem;
   readonly writeError: (message: string) => void;
   readonly writeOutput: (message: string) => void;
@@ -48,6 +59,7 @@ const defaultDependencies: CliDependencies = {
   currentDirectory: () => process.cwd(),
   fileSystem: new NodeRepositoryFileSystem(),
   loadAliases: loadWorkspaceAliases,
+  loadProjects: loadWorkspaceProjects,
   nowMilliseconds: () => performance.now(),
   scan: scanRepository,
   resolve: resolveRepositoryAnalysis,
@@ -92,14 +104,25 @@ export async function runCli(
           dependencies.fileSystem,
         ),
       });
+      const knowledge = buildRepositoryKnowledge({
+        scan,
+        analysis,
+        resolution,
+        projects: await (dependencies.loadProjects ?? (async () => []))(
+          scan,
+          dependencies.fileSystem,
+        ),
+      });
       if (json) {
         dependencies.writeOutput(
-          serializeAnalyzeJson(buildAnalyzeJsonOutput(analysis, resolution)),
+          serializeAnalyzeJson(
+            buildAnalyzeJsonOutput(analysis, resolution, knowledge),
+          ),
         );
       } else {
         const durationSeconds = elapsedSeconds(startTime, dependencies);
         dependencies.writeOutput(
-          `${formatAnalyzeSummary(buildAnalyzeSummary(analysis, resolution), durationSeconds)}\n`,
+          `${formatAnalyzeSummary(buildAnalyzeSummary(analysis, resolution, knowledge), durationSeconds)}\n`,
         );
       }
     } else {
@@ -111,7 +134,8 @@ export async function runCli(
     dependencies.writeError(
       error instanceof RepositoryScanError ||
         error instanceof ParserInitializationError ||
-        error instanceof ResolverInputError
+        error instanceof ResolverInputError ||
+        error instanceof KnowledgeBuilderInputError
         ? error.message
         : command === 'analyze'
           ? 'Repository analysis failed unexpectedly.'
@@ -152,8 +176,37 @@ export function formatAnalysisSummary(
     analysis,
   }),
 ): string {
+  const syntheticScan: RepositoryScan = {
+    rootPath: analysis.rootPath,
+    scannedAt: analysis.analyzedAt,
+    totalFiles: analysis.files.length,
+    totalDirectories: 0,
+    totalIgnoredEntries: 0,
+    files: analysis.files.map((file) => ({
+      id: file.fileId,
+      relativePath: file.relativePath,
+      absolutePath: `${analysis.rootPath}/${file.relativePath}`,
+      extension: null,
+      language:
+        file.language === 'TypeScript'
+          ? SupportedLanguage.TypeScript
+          : file.language === 'TSX'
+            ? SupportedLanguage.TSX
+            : file.language === 'JavaScript'
+              ? SupportedLanguage.JavaScript
+              : SupportedLanguage.JSX,
+      sizeBytes: 0,
+      contentHash: file.contentHash,
+      lastModified: analysis.analyzedAt,
+    })),
+  };
+  const knowledge: RepositoryKnowledge = buildRepositoryKnowledge({
+    scan: syntheticScan,
+    analysis,
+    resolution,
+  });
   return formatAnalyzeSummary(
-    buildAnalyzeSummary(analysis, resolution),
+    buildAnalyzeSummary(analysis, resolution, knowledge),
     durationSeconds,
   );
 }

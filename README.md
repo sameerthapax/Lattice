@@ -3,7 +3,7 @@
 An AI-powered repository knowledge layer that builds a living wiki, dependency map, and knowledge graph for developers and coding agents.
 
 > **Status:** Early development. Deterministic repository scanning, syntax analysis,
-> and cross-file module resolution are implemented; knowledge generation remains planned.
+> cross-file module resolution, and deterministic structural knowledge are implemented.
 
 ## Vision
 
@@ -43,6 +43,10 @@ module imports, exports, and recoverable syntax diagnostics from TypeScript, TSX
 JavaScript, and JSX. Milestone 3 resolves internal relative and configured workspace
 imports, classifies external packages, connects named/default imports and re-exports
 to exported symbols, reports unresolved relationships, and detects dependency cycles.
+Milestone 4 builds repository/project/folder/file/symbol hierarchy nodes, maps files
+to workspace projects from committed project metadata, computes effective file
+surfaces and configured-entry-point project surfaces, aggregates cross-project
+dependencies, and reports structural metrics.
 
 Build the CLI and run a scan:
 
@@ -72,9 +76,10 @@ lattice analyze . --json
 lattice analyze --json
 ```
 
-The JSON schema version is `2`. It preserves scanner/parser output and adds a
+The JSON schema version is `3`. It preserves scanner/parser output and the
 `resolution` section containing modules, internal and external dependencies, symbol
-bindings, unresolved dependencies, and cycles. Source code is not
+bindings, unresolved dependencies, and cycles. It adds a `knowledge` section with
+structural nodes, relations, project dependencies, and summaries. Source code is not
 included, and paths in file records are repository-relative. Analysis timestamps
 and command duration are intentionally omitted so unchanged inputs produce stable
 output.
@@ -115,6 +120,15 @@ Resolved symbol bindings: 73
 Unresolved dependencies: 2
 Dependency cycles: 1
 Use --json to inspect unresolved dependencies.
+Repository knowledge
+Projects: 12
+Folders: 47
+Files: 182
+Symbols: 212
+Public file symbols: 96
+Public project symbols: 41
+Cross-project dependencies: 18
+Orphan source files: 3
 Duration: 0.12s
 ```
 
@@ -123,9 +137,10 @@ use `node dist/apps/cli/main.js index .` or
 `node dist/apps/cli/main.js analyze .` after building.
 
 Analysis is syntax-level and deterministic; it does not claim compiler-level
-semantic understanding. CommonJS, dynamic imports, package.json export conditions,
-TypeScript compiler resolution, call graphs, type graphs, persistence, knowledge
-generation, semantic search, and AI assistance remain unimplemented.
+semantic understanding. Feature inference, semantic module clustering, CommonJS,
+dynamic imports, package.json export conditions, TypeScript compiler resolution,
+call/type/runtime graphs, persistence, search, context packages, wiki rendering,
+AI summaries, and MCP knowledge queries remain unimplemented.
 
 ## Development
 

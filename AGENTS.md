@@ -27,6 +27,13 @@ Most product behavior is not implemented yet. Keep initialization work separate 
 - Make intentional schema-version changes when a JSON contract changes.
 - Partial syntax errors must not invalidate an otherwise analyzable repository.
 - Machine-readable CLI output must use explicit versioned DTOs rather than blindly serializing domain models.
+- Keep structural knowledge construction separate from parsing and resolution.
+- Derive project membership only from explicit injected project metadata.
+- Derive project public APIs only from configured entry points.
+- Knowledge builders must not read source files or workspace configuration directly.
+- Use versioned deterministic namespaces for knowledge node and relation IDs.
+- Do not mix AI-generated knowledge into deterministic structural models.
+- Change the JSON schema version whenever its contract materially changes.
 - Successful JSON commands must emit only JSON on stdout and omit nondeterministic timestamps and durations.
 - Treat LLM output as untrusted input and validate it.
 - Preserve evidence and provenance for generated knowledge.

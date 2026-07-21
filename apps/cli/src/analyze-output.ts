@@ -5,6 +5,16 @@ import type {
   SourceImportKind,
   SourceSymbolKind,
 } from '@lattice/core-parser';
+import type {
+  FileKnowledgeNode,
+  FolderKnowledgeNode,
+  KnowledgeRelation,
+  ProjectDependency,
+  ProjectKnowledgeNode,
+  RepositoryKnowledge,
+  RepositoryKnowledgeNode,
+  SymbolKnowledgeNode,
+} from '@lattice/core-knowledge';
 
 export interface AnalyzeSummary {
   readonly scannedFileCount: number;
@@ -20,11 +30,18 @@ export interface AnalyzeSummary {
   readonly resolvedSymbolBindingCount: number;
   readonly unresolvedDependencyCount: number;
   readonly cycleCount: number;
+  readonly projectCount: number;
+  readonly folderCount: number;
+  readonly knowledgeFileCount: number;
+  readonly publicFileSymbolCount: number;
+  readonly publicProjectSymbolCount: number;
+  readonly crossProjectDependencyCount: number;
+  readonly orphanFileCount: number;
   readonly symbolsByKind: Readonly<Record<SourceSymbolKind, number>>;
 }
 
 export interface AnalyzeJsonOutput {
-  readonly schemaVersion: '2';
+  readonly schemaVersion: '3';
   readonly command: 'analyze';
   readonly repository: {
     readonly rootPath: string;
@@ -42,6 +59,17 @@ export interface AnalyzeJsonOutput {
     readonly unresolvedDependencies: readonly UnresolvedDependencyDto[];
     readonly cycles: readonly ModuleCycleDto[];
   };
+  readonly knowledge: AnalyzeJsonKnowledge;
+}
+
+export interface AnalyzeJsonKnowledge {
+  readonly repository: RepositoryKnowledgeNode;
+  readonly projects: readonly ProjectKnowledgeNode[];
+  readonly folders: readonly FolderKnowledgeNode[];
+  readonly files: readonly FileKnowledgeNode[];
+  readonly symbols: readonly SymbolKnowledgeNode[];
+  readonly relations: readonly KnowledgeRelation[];
+  readonly projectDependencies: readonly ProjectDependency[];
 }
 
 export type ResolvedModuleDto = ResolvedModule;
@@ -143,6 +171,7 @@ const SYMBOL_LABELS: Readonly<Record<SourceSymbolKind, string>> = {
 export function buildAnalyzeSummary(
   analysis: RepositoryAnalysis,
   resolution: ResolvedRepositoryAnalysis,
+  knowledge: RepositoryKnowledge,
 ): AnalyzeSummary {
   const symbolsByKind: Record<SourceSymbolKind, number> = {
     function: 0,
@@ -189,6 +218,14 @@ export function buildAnalyzeSummary(
     resolvedSymbolBindingCount: resolution.symbolBindings.length,
     unresolvedDependencyCount: resolution.unresolvedDependencies.length,
     cycleCount: resolution.cycles.length,
+    projectCount: knowledge.summaries.projectCount,
+    folderCount: knowledge.summaries.folderCount,
+    knowledgeFileCount: knowledge.summaries.fileCount,
+    publicFileSymbolCount: knowledge.summaries.publicFileSymbolCount,
+    publicProjectSymbolCount: knowledge.summaries.publicProjectSymbolCount,
+    crossProjectDependencyCount:
+      knowledge.summaries.crossProjectDependencyCount,
+    orphanFileCount: knowledge.summaries.orphanFileCount,
     symbolsByKind,
   };
 }
@@ -219,6 +256,15 @@ export function formatAnalyzeSummary(
     ...(summary.unresolvedDependencyCount > 0
       ? ['Use --json to inspect unresolved dependencies.']
       : []),
+    'Repository knowledge',
+    `Projects: ${summary.projectCount}`,
+    `Folders: ${summary.folderCount}`,
+    `Files: ${summary.knowledgeFileCount}`,
+    `Symbols: ${summary.symbolCount}`,
+    `Public file symbols: ${summary.publicFileSymbolCount}`,
+    `Public project symbols: ${summary.publicProjectSymbolCount}`,
+    `Cross-project dependencies: ${summary.crossProjectDependencyCount}`,
+    `Orphan source files: ${summary.orphanFileCount}`,
     `Duration: ${durationSeconds.toFixed(2)}s`,
   ].join('\n');
 }
@@ -226,14 +272,15 @@ export function formatAnalyzeSummary(
 export function buildAnalyzeJsonOutput(
   analysis: RepositoryAnalysis,
   resolution: ResolvedRepositoryAnalysis,
+  knowledge: RepositoryKnowledge,
 ): AnalyzeJsonOutput {
   return {
-    schemaVersion: '2',
+    schemaVersion: '3',
     command: 'analyze',
     repository: {
       rootPath: analysis.rootPath,
     },
-    summary: buildAnalyzeSummary(analysis, resolution),
+    summary: buildAnalyzeSummary(analysis, resolution, knowledge),
     analysis: {
       files: analysis.files.map((file) => ({
         fileId: file.fileId,
@@ -315,6 +362,53 @@ export function buildAnalyzeJsonOutput(
         relativePaths: [...cycle.relativePaths],
       })),
     },
+    knowledge: copyKnowledge(knowledge),
+  };
+}
+
+function copyKnowledge(knowledge: RepositoryKnowledge): AnalyzeJsonKnowledge {
+  return {
+    repository: {
+      ...knowledge.repository,
+      projectIds: [...knowledge.repository.projectIds],
+      topLevelFolderIds: [...knowledge.repository.topLevelFolderIds],
+      fileIds: [...knowledge.repository.fileIds],
+    },
+    projects: knowledge.projects.map((item) => ({
+      ...item,
+      folderIds: [...item.folderIds],
+      fileIds: [...item.fileIds],
+      symbolIds: [...item.symbolIds],
+      incomingProjectDependencyIds: [...item.incomingProjectDependencyIds],
+      outgoingProjectDependencyIds: [...item.outgoingProjectDependencyIds],
+      publicSymbolIds: [...item.publicSymbolIds],
+    })),
+    folders: knowledge.folders.map((item) => ({
+      ...item,
+      childFolderIds: [...item.childFolderIds],
+      fileIds: [...item.fileIds],
+    })),
+    files: knowledge.files.map((item) => ({
+      ...item,
+      symbolIds: [...item.symbolIds],
+      publicSymbolIds: [...item.publicSymbolIds],
+      incomingFileDependencyIds: [...item.incomingFileDependencyIds],
+      outgoingFileDependencyIds: [...item.outgoingFileDependencyIds],
+    })),
+    symbols: knowledge.symbols.map((item) => ({
+      ...item,
+      childSymbolIds: [...item.childSymbolIds],
+      incomingBindingIds: [...item.incomingBindingIds],
+      location: { ...item.location },
+    })),
+    relations: knowledge.relations.map((item) => ({
+      ...item,
+      metadata: item.metadata === null ? null : { ...item.metadata },
+    })),
+    projectDependencies: knowledge.projectDependencies.map((item) => ({
+      ...item,
+      fileDependencyIds: [...item.fileDependencyIds],
+    })),
   };
 }
 

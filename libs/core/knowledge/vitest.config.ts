@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 const workspaceRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../..',
+  '../../..',
 );
 
 export default {
@@ -20,10 +20,6 @@ export default {
       '@lattice/core-parser': path.join(
         workspaceRoot,
         'libs/core/parser/src/index.ts',
-      ),
-      '@lattice/core-knowledge': path.join(
-        workspaceRoot,
-        'libs/core/knowledge/src/index.ts',
       ),
       '@lattice/filesystem': path.join(
         workspaceRoot,

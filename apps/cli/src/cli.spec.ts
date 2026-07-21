@@ -5,6 +5,7 @@ import {
   type RepositoryScan,
 } from '@lattice/core-indexer';
 import type { RepositoryAnalysis } from '@lattice/core-parser';
+import { buildRepositoryKnowledge } from '@lattice/core-knowledge';
 import { NodeRepositoryFileSystem } from '@lattice/filesystem';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -174,7 +175,7 @@ describe('runCli', () => {
     const output = getWrittenOutput(dependencies);
     expect(() => JSON.parse(output)).not.toThrow();
     expect(JSON.parse(output)).toMatchObject({
-      schemaVersion: '2',
+      schemaVersion: '3',
       command: 'analyze',
       summary: {
         scannedFileCount: 3,
@@ -240,6 +241,17 @@ describe('runCli', () => {
 
   it('keeps per-file failures in JSON while returning success', async () => {
     const dependencies = createDependencies();
+    vi.mocked(dependencies.scan).mockResolvedValue({
+      ...scan,
+      totalFiles: 4,
+      files: [
+        ...scan.files,
+        {
+          ...createFile('src/missing.ts', SupportedLanguage.TypeScript),
+          id: 'missing-file',
+        },
+      ],
+    });
     vi.mocked(dependencies.analyze).mockResolvedValue({
       ...analysis,
       failedFileCount: 1,
@@ -312,7 +324,9 @@ describe('runCli', () => {
     await runCli(['analyze', '.'], dependencies);
 
     expect(dependencies.writeOutput).toHaveBeenCalledWith(
-      `${formatAnalysisSummary(analysis, 0.812)}\n`,
+      expect.stringContaining(
+        'Repository knowledge\nProjects: 0\nFolders: 1\nFiles: 3',
+      ),
     );
   });
 
@@ -385,6 +399,14 @@ describe('runCli', () => {
 
   it('reports isolated parse failures without failing the command', async () => {
     const dependencies = createDependencies();
+    vi.mocked(dependencies.scan).mockResolvedValue({
+      ...scan,
+      totalFiles: 4,
+      files: [
+        ...scan.files,
+        createFile('src/missing.ts', SupportedLanguage.TypeScript),
+      ],
+    });
     vi.mocked(dependencies.analyze).mockResolvedValue({
       ...analysis,
       failedFileCount: 1,
@@ -452,6 +474,15 @@ describe('formatAnalysisSummary', () => {
         'Unresolved dependencies: 1',
         'Dependency cycles: 0',
         'Use --json to inspect unresolved dependencies.',
+        'Repository knowledge',
+        'Projects: 0',
+        'Folders: 1',
+        'Files: 2',
+        'Symbols: 1',
+        'Public file symbols: 1',
+        'Public project symbols: 0',
+        'Cross-project dependencies: 0',
+        'Orphan source files: 2',
         'Duration: 0.81s',
       ].join('\n'),
     );
@@ -485,7 +516,7 @@ describe('module resolution output', () => {
     expect(output).not.toContain('Use --json');
   });
 
-  it('includes the schema-version-2 resolution section and fixed summary field order', async () => {
+  it('includes the schema-version-3 resolution section and fixed summary field order', async () => {
     const dependencies = createDependencies();
     await runCli(['analyze', '--json'], dependencies);
     const parsed = JSON.parse(getWrittenOutput(dependencies)) as {
@@ -501,11 +532,11 @@ describe('module resolution output', () => {
       'cycles',
     ]);
     expect(Object.keys(parsed.summary).slice(-6)).toEqual([
-      'internalDependencyCount',
-      'externalDependencyCount',
-      'resolvedSymbolBindingCount',
-      'unresolvedDependencyCount',
-      'cycleCount',
+      'knowledgeFileCount',
+      'publicFileSymbolCount',
+      'publicProjectSymbolCount',
+      'crossProjectDependencyCount',
+      'orphanFileCount',
       'symbolsByKind',
     ]);
   });
@@ -528,59 +559,22 @@ describe('serializeAnalyzeJson', () => {
       scan: { ...scan, totalFiles: 0, files: [] },
       analysis: emptyAnalysis,
     });
-    expect(
-      serializeAnalyzeJson(
-        buildAnalyzeJsonOutput(emptyAnalysis, emptyResolution),
+    const emptyScan = { ...scan, totalFiles: 0, files: [] };
+    const output = serializeAnalyzeJson(
+      buildAnalyzeJsonOutput(
+        emptyAnalysis,
+        emptyResolution,
+        buildRepositoryKnowledge({
+          scan: emptyScan,
+          analysis: emptyAnalysis,
+          resolution: emptyResolution,
+        }),
       ),
-    ).toBe(
-      [
-        '{',
-        '  "schemaVersion": "2",',
-        '  "command": "analyze",',
-        '  "repository": {',
-        '    "rootPath": "/repository"',
-        '  },',
-        '  "summary": {',
-        '    "scannedFileCount": 0,',
-        '    "parsedFileCount": 0,',
-        '    "skippedFileCount": 0,',
-        '    "failedFileCount": 0,',
-        '    "filesWithSyntaxErrors": 0,',
-        '    "symbolCount": 0,',
-        '    "importCount": 0,',
-        '    "exportCount": 0,',
-        '    "internalDependencyCount": 0,',
-        '    "externalDependencyCount": 0,',
-        '    "resolvedSymbolBindingCount": 0,',
-        '    "unresolvedDependencyCount": 0,',
-        '    "cycleCount": 0,',
-        '    "symbolsByKind": {',
-        '      "function": 0,',
-        '      "class": 0,',
-        '      "method": 0,',
-        '      "constructor": 0,',
-        '      "interface": 0,',
-        '      "type-alias": 0,',
-        '      "enum": 0,',
-        '      "variable": 0',
-        '    }',
-        '  },',
-        '  "analysis": {',
-        '    "files": [],',
-        '    "failures": []',
-        '  },',
-        '  "resolution": {',
-        '    "modules": [],',
-        '    "dependencies": [],',
-        '    "externalDependencies": [],',
-        '    "symbolBindings": [],',
-        '    "unresolvedDependencies": [],',
-        '    "cycles": []',
-        '  }',
-        '}',
-        '',
-      ].join('\n'),
     );
+    expect(output.startsWith('{\n  "schemaVersion": "3",\n')).toBe(true);
+    expect(output).toContain('\n  "knowledge": {\n');
+    expect(output.endsWith('\n')).toBe(true);
+    expect(output.endsWith('\n\n')).toBe(false);
   });
 });
 

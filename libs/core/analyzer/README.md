@@ -3,6 +3,8 @@
 `@lattice/core-analyzer` is Lattice's deterministic cross-file resolution stage.
 It consumes an existing `RepositoryScan` and syntax-only `RepositoryAnalysis`; it
 does not read files, traverse the repository, parse source, or mutate either input.
+Its resolved relationships are input to `@lattice/core-knowledge`; hierarchy and
+structural knowledge construction do not belong in the analyzer.
 
 ## Public API
 
