@@ -3,7 +3,8 @@
 An AI-powered repository knowledge layer that builds a living wiki, dependency map, and knowledge graph for developers and coding agents.
 
 > **Status:** Early development. Deterministic repository scanning, syntax analysis,
-> cross-file module resolution, and deterministic structural knowledge are implemented.
+> cross-file module resolution, deterministic structural knowledge, and bounded
+> deterministic context packages are implemented.
 
 ## Vision
 
@@ -47,6 +48,14 @@ Milestone 4 builds repository/project/folder/file/symbol hierarchy nodes, maps f
 to workspace projects from committed project metadata, computes effective file
 surfaces and configured-entry-point project surfaces, aggregates cross-project
 dependencies, and reports structural metrics.
+Milestone 5 constructs focused file, symbol, folder, and project packages using
+bounded dependency/dependent expansion, explicit structural ranking, selected source
+excerpts, and deterministic omission reporting.
+File context prioritizes target declarations and imported bindings. Project context
+includes directly adjacent projects and their dependency records. Folder context
+uses source-first ranking and exact descendant-folder depth; mandatory hierarchy for
+selected files may extend deeper. File metrics remain repository-wide while emitted
+relationships and excerpts remain independently bounded.
 
 Build the CLI and run a scan:
 
@@ -75,6 +84,20 @@ explicit path:
 lattice analyze . --json
 lattice analyze --json
 ```
+
+Build context for a repository entity:
+
+```sh
+lattice context --file apps/cli/src/cli.ts
+lattice context --symbol runCli --in apps/cli/src/cli.ts
+lattice context --project cli --json
+lattice context --folder libs/core --no-source
+```
+
+`context --json` emits the context package itself with independent schema version
+`"1"` and one trailing newline. Human output shows selection counts without source.
+Limits include files, symbols, relations, excerpts, source characters, and dependency
+and dependent depth. Invalid or ambiguous targets and invalid limits exit nonzero.
 
 The JSON schema version is `3`. It preserves scanner/parser output and the
 `resolution` section containing modules, internal and external dependencies, symbol
@@ -139,8 +162,9 @@ use `node dist/apps/cli/main.js index .` or
 Analysis is syntax-level and deterministic; it does not claim compiler-level
 semantic understanding. Feature inference, semantic module clustering, CommonJS,
 dynamic imports, package.json export conditions, TypeScript compiler resolution,
-call/type/runtime graphs, persistence, search, context packages, wiki rendering,
-AI summaries, and MCP knowledge queries remain unimplemented.
+call/type/runtime graphs, persistence, semantic search, embeddings, wiki rendering,
+LLM summaries, token-aware packing, automatic feature detection, Git history context,
+and MCP context exposure remain unimplemented.
 
 ## Development
 

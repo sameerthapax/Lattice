@@ -45,6 +45,15 @@ Most product behavior is not implemented yet. Keep initialization work separate 
 - Do not add dependencies without a concrete need.
 - Keep the project local-first and cloud-optional.
 - Never commit secrets, generated credentials, or local repository data.
+- Context selection must be deterministic and explainable; every selected optional entity needs a stable selection reason.
+- Mandatory context entities must never be silently dropped, and public relationships must not reference omitted entities.
+- Context source access must be injected, source identity and hashes must be verified, and limit-based omissions must be reported.
+- Context-package schema versioning is independent of analysis schema versioning.
+- Context builders must not invoke LLMs or semantic services.
+- Context file metrics must remain repository-wide rather than reflecting bounded package relationships.
+- File-level binding evidence must not be promoted to symbol ownership without structural proof.
+- Folder depth is exact descendant-folder edge distance; mandatory selected-file hierarchy may exceed it.
+- Target-relevant relationships must rank ahead of optional containment under relation limits.
 
 ## TypeScript rules
 

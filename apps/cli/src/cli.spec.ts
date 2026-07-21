@@ -190,6 +190,32 @@ describe('runCli', () => {
     });
   });
 
+  it('emits a deterministic source-disabled file context package', async () => {
+    const dependencies = createDependencies();
+    const exitCode = await runCli(
+      ['context', '--file', 'src/app.ts', '--no-source', '--json'],
+      dependencies,
+    );
+    expect(exitCode).toBe(0);
+    const output = getWrittenOutput(dependencies);
+    expect(output.endsWith('\n')).toBe(true);
+    expect(JSON.parse(output)).toMatchObject({
+      schemaVersion: '1',
+      target: { kind: 'file', relativePath: 'src/app.ts' },
+      excerpts: [],
+    });
+    expect(output).not.toContain('absolutePath');
+    expect(dependencies.writeError).not.toHaveBeenCalled();
+  });
+
+  it('requires exactly one context target', async () => {
+    const dependencies = createDependencies();
+    expect(await runCli(['context', '--json'], dependencies)).toBe(1);
+    expect(dependencies.writeError).toHaveBeenCalledWith(
+      expect.stringContaining('Usage: lattice context'),
+    );
+  });
+
   it('defaults JSON analysis to the current directory', async () => {
     const dependencies = createDependencies();
 
@@ -379,7 +405,7 @@ describe('runCli', () => {
       1,
     );
     expect(dependencies.writeError).toHaveBeenCalledWith(
-      'Usage: lattice <index|analyze> [repository-path]',
+      'Usage: lattice <index|analyze|context> [repository-path]',
     );
   });
 

@@ -67,6 +67,10 @@ then name; folders/files by path; symbols by path/location/kind/name/ID; relatio
 and project dependencies use explicit stable comparators. Timestamps and traversal
 order do not affect output.
 
+This graph is consumed by `@lattice/context-builder`, which selects bounded DTOs
+without changing the full source-free knowledge model. Target ranking and source
+access remain outside knowledge.
+
 Feature inference, semantic modules, natural-language summaries, call/type/runtime
-graphs, persistence, search, context packages, wiki rendering, and MCP queries are
-outside this library.
+graphs, persistence, search, wiki rendering, and MCP queries are outside this
+library.

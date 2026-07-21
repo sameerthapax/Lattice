@@ -25,6 +25,14 @@ import {
   NodeRepositoryFileSystem,
   type RepositoryFileSystem,
 } from '@lattice/filesystem';
+import {
+  buildContextPackage,
+  ContextBuilderInputError,
+  type ContextPackage,
+  type ContextSelectionOptions,
+  type SymbolContextTarget,
+  type ContextTarget,
+} from '@lattice/context-builder';
 
 import {
   buildAnalyzeJsonOutput,
@@ -70,9 +78,11 @@ const defaultDependencies: CliDependencies = {
 };
 
 interface ParsedCliArguments {
-  readonly command: 'index' | 'analyze';
+  readonly command: 'index' | 'analyze' | 'context';
   readonly repositoryPath: string | null;
   readonly json: boolean;
+  readonly contextTarget: ContextTarget | null;
+  readonly contextOptions: ContextSelectionOptions;
 }
 
 export async function runCli(
@@ -85,13 +95,14 @@ export async function runCli(
     return 1;
   }
 
-  const { command, repositoryPath, json } = parsedArguments;
+  const { command, repositoryPath, json, contextTarget, contextOptions } =
+    parsedArguments;
   const startTime = json ? null : dependencies.nowMilliseconds();
   try {
     const scan = await dependencies.scan({
       rootPath: repositoryPath ?? dependencies.currentDirectory(),
     });
-    if (command === 'analyze') {
+    if (command === 'analyze' || command === 'context') {
       const analysis = await dependencies.analyze({
         scan,
         fileSystem: dependencies.fileSystem,
@@ -113,7 +124,54 @@ export async function runCli(
           dependencies.fileSystem,
         ),
       });
-      if (json) {
+      if (command === 'context') {
+        const package_ = await buildContextPackage({
+          scan,
+          analysis,
+          resolution,
+          knowledge,
+          target: contextTarget as ContextTarget,
+          options: contextOptions,
+          sourceProvider:
+            contextOptions.includeSource === false
+              ? undefined
+              : {
+                  readSource: async ({
+                    fileId,
+                    relativePath,
+                    expectedContentHash,
+                  }) => {
+                    const scanned = scan.files.find(
+                      (file) =>
+                        file.id === fileId &&
+                        file.relativePath === relativePath,
+                    );
+                    if (!scanned)
+                      throw new Error(
+                        'Requested source is absent from the repository scan.',
+                      );
+                    if (scanned.contentHash !== expectedContentHash)
+                      throw new Error(
+                        'Requested source hash differs from the scan.',
+                      );
+                    const bytes = await dependencies.fileSystem.readBytes(
+                      scanned.absolutePath,
+                    );
+                    return {
+                      fileId,
+                      relativePath,
+                      contentHash: dependencies.fileSystem.hashBytes(bytes),
+                      content: bytes.toString('utf8'),
+                    };
+                  },
+                },
+        });
+        dependencies.writeOutput(
+          json
+            ? `${JSON.stringify(package_)}\n`
+            : `${formatContextSummary(package_)}\n`,
+        );
+      } else if (json) {
         dependencies.writeOutput(
           serializeAnalyzeJson(
             buildAnalyzeJsonOutput(analysis, resolution, knowledge),
@@ -135,9 +193,10 @@ export async function runCli(
       error instanceof RepositoryScanError ||
         error instanceof ParserInitializationError ||
         error instanceof ResolverInputError ||
-        error instanceof KnowledgeBuilderInputError
+        error instanceof KnowledgeBuilderInputError ||
+        error instanceof ContextBuilderInputError
         ? error.message
-        : command === 'analyze'
+        : command === 'analyze' || command === 'context'
           ? 'Repository analysis failed unexpectedly.'
           : 'Repository scan failed unexpectedly.',
     );
@@ -242,17 +301,75 @@ function parseCliArguments(
   arguments_: readonly string[],
 ): ParsedCliArguments | string {
   const [command, ...values] = arguments_;
-  if (command !== 'index' && command !== 'analyze') {
-    return 'Usage: lattice <index|analyze> [repository-path]';
+  if (command !== 'index' && command !== 'analyze' && command !== 'context') {
+    return 'Usage: lattice <index|analyze|context> [repository-path]';
   }
 
   let repositoryPath: string | null = null;
   let json = false;
-  for (const value of values) {
+  let contextTarget: ContextTarget | null = null;
+  const contextOptions: Record<string, boolean | number> = {};
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index] as string;
     if (value.startsWith('-')) {
-      if (value === '--json' && command === 'analyze' && !json) {
+      if (value === '--json' && command !== 'index' && !json) {
         json = true;
         continue;
+      }
+      if (command === 'context') {
+        if (value === '--no-source') {
+          contextOptions.includeSource = false;
+          continue;
+        }
+        const targetKinds: Record<string, ContextTarget['kind']> = {
+          '--file': 'file',
+          '--symbol': 'symbol',
+          '--folder': 'folder',
+          '--project': 'project',
+        };
+        if (value in targetKinds) {
+          const targetValue = values[++index];
+          if (!targetValue || targetValue.startsWith('-') || contextTarget)
+            return contextUsage();
+          const kind = targetKinds[value] as ContextTarget['kind'];
+          contextTarget =
+            kind === 'file'
+              ? { kind, relativePath: targetValue }
+              : kind === 'symbol'
+                ? { kind, qualifiedName: targetValue }
+                : kind === 'folder'
+                  ? { kind, relativePath: targetValue }
+                  : { kind, name: targetValue };
+          continue;
+        }
+        if (value === '--in') {
+          const file = values[++index];
+          if (!file || contextTarget?.kind !== 'symbol') return contextUsage();
+          const symbolTarget: SymbolContextTarget = contextTarget;
+          contextTarget = {
+            kind: 'symbol',
+            qualifiedName: symbolTarget.qualifiedName,
+            fileRelativePath: file,
+          };
+          continue;
+        }
+        const optionNames: Record<string, keyof ContextSelectionOptions> = {
+          '--max-files': 'maxFiles',
+          '--max-symbols': 'maxSymbols',
+          '--max-relations': 'maxRelations',
+          '--max-excerpts': 'maxExcerpts',
+          '--max-source-chars': 'maxTotalSourceCharacters',
+          '--dependency-depth': 'dependencyDepth',
+          '--dependent-depth': 'dependentDepth',
+        };
+        if (value in optionNames) {
+          const raw = values[++index];
+          const parsed = Number(raw);
+          if (!raw || !Number.isInteger(parsed))
+            return `Invalid numeric option: ${value}`;
+          contextOptions[optionNames[value] as string] = parsed;
+          continue;
+        }
       }
       return `Unknown option: ${value}\nUsage: lattice ${command} [repository-path]${command === 'analyze' ? ' [--json]' : ''}`;
     }
@@ -261,8 +378,38 @@ function parseCliArguments(
     }
     repositoryPath = value;
   }
+  if (command === 'context' && !contextTarget) return contextUsage();
+  return { command, repositoryPath, json, contextTarget, contextOptions };
+}
 
-  return { command, repositoryPath, json };
+function contextUsage(): string {
+  return 'Usage: lattice context [repository-path] <--file path|--symbol name [--in path]|--folder path|--project name> [--json] [--no-source]';
+}
+
+export function formatContextSummary(package_: ContextPackage): string {
+  const targetFile = package_.target.relativePath
+    ? `\nFile: ${package_.target.relativePath}`
+    : '';
+  const project = package_.entities.projects.find(
+    (item) => item.nodeId === package_.target.projectId,
+  );
+  const omissions = package_.omissions.map(
+    (item) => `${item.reason}: ${item.count}`,
+  );
+  return [
+    'Context package',
+    `Target: ${package_.target.kind} ${package_.target.qualifiedName}`,
+    `${targetFile}${project ? `\nProject: ${project.name}` : ''}`.trim(),
+    'Selected',
+    `Files: ${package_.metrics.fileCount}`,
+    `Symbols: ${package_.metrics.symbolCount}`,
+    `Relationships: ${package_.metrics.relationCount}`,
+    `Source excerpts: ${package_.metrics.excerptCount}`,
+    `Source characters: ${package_.metrics.sourceCharacterCount.toLocaleString('en-US')}`,
+    ...(omissions.length ? ['Omissions', ...omissions] : []),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function elapsedSeconds(

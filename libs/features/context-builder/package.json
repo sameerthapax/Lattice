@@ -6,6 +6,10 @@
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "dependencies": {
+    "@lattice/core-analyzer": "0.0.1",
+    "@lattice/core-indexer": "0.0.1",
+    "@lattice/core-knowledge": "0.0.1",
+    "@lattice/core-parser": "0.0.1",
     "tslib": "^2.3.0"
   }
 }

@@ -188,6 +188,45 @@ and omits timestamps, durations, source contents, and per-file absolute paths. T
 keeps machine-readable CLI compatibility deliberate without coupling parser model
 evolution directly to an external wire format.
 
+The context builder is a pure selection and assembly stage above repository
+knowledge. The implemented pipeline is:
+
+```text
+Repository → Filesystem Scanner → Repository Scan → Tree-sitter Parser
+→ Repository Analysis → Module Resolver → Resolved Repository Analysis
+→ Knowledge Builder → Repository Knowledge Model → Context Builder
+→ Deterministic Context Package → MCP, Coding Agents, Search, Wiki — planned
+```
+
+File, symbol, folder, and project targets use one explicit lookup strategy. Integer
+priority classes plus path, source location, and stable-ID tie breakers rank
+candidates. Targets and hierarchy are mandatory; optional entities stop at validated
+limits and receive fixed selection reasons. Relations require both endpoints.
+Aggregated omissions are contractual.
+
+File declarations rank before bound and dependency symbols. Incoming binding
+evidence selects a file but is not attributed to arbitrary declarations. Project
+context explicitly includes directly adjacent project nodes and connecting
+dependency records without selecting every adjacent-project file. Project files rank
+public surfaces, cross-project participants, production source, tests, then metadata.
+Folder files use source-first ranking; folder depth is exact descendant-folder edge
+distance, while mandatory containment for selected files may add deeper folders.
+
+Source selection precedes an injected provider boundary. The CLI reads only
+scanner-listed paths; the builder verifies identity, normalized path, declared and
+recomputed hashes, binary status, and size. Parser ranges drive whole-line excerpts,
+with deterministic surrounding lines, overlap merging, truncation, and total budgets.
+Excerpt requests are derived after bounded symbol selection, so symbol-backed ranges
+reference selected symbols. Relation priority preserves target relationships and
+project dependencies before optional containment. Per-file dependency metrics remain
+repository-wide. `SOURCE_DISABLED` counts all selected files when source is disabled
+for the package and does not indicate provider failure.
+
+Context schema `"1"` is independent of analyze schema `"3"`. IDs cover structural
+identity, normalized options, and selected hashes when source is enabled. Persistence
+is deferred with caching infrastructure; semantic relevance is deferred until after
+structural evidence; token counting belongs to future model-specific packing.
+
 The API still implements only `GET /health`. The web and MCP entry points do not
 consume repository scans yet.
 
@@ -224,6 +263,11 @@ Repository knowledge will feed planned graph and feature libraries. Data-access 
 | 2026-07-20 | Treat configured entry points as the only source of project-public APIs              | Accepted | Exported implementation files are not necessarily package surfaces, so guessed index files would create false public contracts.                                    |
 | 2026-07-20 | Version analyze JSON structural-knowledge output as schema 3                         | Accepted | Knowledge nodes, relations, dependencies, and metrics materially change the machine-readable contract.                                                             |
 | 2026-07-20 | Establish structural knowledge before generated knowledge                            | Accepted | Deterministic evidence and provenance must precede optional natural-language or semantic inference.                                                                |
+| 2026-07-20 | Build deterministic bounded context before semantic retrieval                        | Accepted | Structural ranking is reproducible and useful without embeddings.                                                                                                  |
+| 2026-07-20 | Inject context source access                                                         | Accepted | Selection cannot traverse files outside scanner authority.                                                                                                         |
+| 2026-07-20 | Make selection reasons and omissions contractual                                     | Accepted | Consumers can explain inclusion and detect limit exclusions.                                                                                                       |
+| 2026-07-20 | Version context packages independently as schema 1                                   | Accepted | Target packages are separate from full analyze schema 3.                                                                                                           |
+| 2026-07-20 | Expose context as a separate CLI command                                             | Accepted | Analyze remains stable while target context has its own contract.                                                                                                  |
 
 ## 10. Documentation-update rules
 
