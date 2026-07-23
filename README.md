@@ -4,7 +4,8 @@ An AI-powered repository knowledge layer that builds a living wiki, dependency m
 
 > **Status:** Early development. Deterministic repository scanning, syntax analysis,
 > cross-file module resolution, deterministic structural knowledge, and bounded
-> deterministic context packages are implemented.
+> deterministic context packages are implemented. Structural knowledge can also be
+> validated, indexed, queried, and projected into bounded visualization-safe graphs.
 
 ## Vision
 
@@ -51,6 +52,10 @@ dependencies, and reports structural metrics.
 Milestone 5 constructs focused file, symbol, folder, and project packages using
 bounded dependency/dependent expansion, explicit structural ranking, selected source
 excerpts, and deterministic omission reporting.
+The core graph library validates and indexes those same canonical knowledge nodes and
+relations for incoming, outgoing, neighbor, and bounded target-neighborhood queries.
+It reuses knowledge IDs and emits independent transport-neutral projection schema
+`"1"`; it does not create new repository facts.
 File context prioritizes target declarations and imported bindings. Project context
 includes directly adjacent projects and their dependency records. Folder context
 uses source-first ranking and exact descendant-folder depth; mandatory hierarchy for
@@ -93,6 +98,43 @@ lattice context --symbol runCli --in apps/cli/src/cli.ts
 lattice context --project cli --json
 lattice context --folder libs/core --no-source
 ```
+
+Generate a deterministic graph artifact for the web explorer:
+
+```sh
+lattice graph path/to/repository
+lattice graph path/to/repository --view file-dependencies --pretty
+```
+
+The default output is `<repository>/.lattice/graph.json`. Available views are
+`repository`, `project-dependencies`, `file-dependencies`, `public-api`, and `full`.
+Use `--output`, `--target`, `--max-depth`, `--max-nodes`, and `--max-relations` to
+control output. Existing unrelated files are never overwritten.
+
+To inspect the external manual fixture end to end:
+
+```sh
+npm run build -- --projects=cli
+node dist/apps/cli/main.js graph /Users/sams/WebstormProjects/lattice-wiki-test-repo --pretty
+LATTICE_GRAPH_PATH=/Users/sams/WebstormProjects/lattice-wiki-test-repo/.lattice/graph.json npm run start:web
+```
+
+Open `http://localhost:3000`. Regenerate the artifact and use Reload in the web app
+to read it again without restarting Next.js. The CLI performs all repository
+analysis; the web server reads only the configured artifact path and the browser
+only renders its validated, source-free projection.
+
+The repository view starts as a three-level structural overview. Select a branch
+node to collapse visible descendants or reveal the next three levels. The inspector
+can isolate a selected node with its complete structural subtree and ancestor chain
+without displaying sibling branches. Filters, panel visibility, and layouts remain
+UI-only views over the unchanged graph artifact.
+Force-directed placement is the default for repository exploration. Node radius is a
+bounded function of incident structural relationship count, and labels are rendered
+inside nodes so highly connected repository hubs remain visually identifiable.
+Viewer controls can adjust node-kind colors, circle scale, and layout edge distance
+without changing the deterministic graph artifact. Label font size and wrapping derive
+automatically from each rendered circle size.
 
 `context --json` emits the context package itself with independent schema version
 `"1"` and one trailing newline. Human output shows selection counts without source.
@@ -159,7 +201,8 @@ When working directly from a checkout without installing the package executable,
 use `node dist/apps/cli/main.js index .` or
 `node dist/apps/cli/main.js analyze .` after building.
 
-Analysis is syntax-level and deterministic; it does not claim compiler-level
+Analysis and graph projection are structural and deterministic; static dependency
+graphs are not runtime or call-flow graphs. Lattice does not claim compiler-level
 semantic understanding. Feature inference, semantic module clustering, CommonJS,
 dynamic imports, package.json export conditions, TypeScript compiler resolution,
 call/type/runtime graphs, persistence, semantic search, embeddings, wiki rendering,

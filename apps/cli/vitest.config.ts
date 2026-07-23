@@ -25,6 +25,10 @@ export default {
         workspaceRoot,
         'libs/core/knowledge/src/index.ts',
       ),
+      '@lattice/core-graph': path.join(
+        workspaceRoot,
+        'libs/core/graph/src/index.ts',
+      ),
       '@lattice/filesystem': path.join(
         workspaceRoot,
         'libs/data-access/filesystem/src/index.ts',

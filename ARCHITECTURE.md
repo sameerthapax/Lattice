@@ -24,9 +24,15 @@ libs/
 
 ## 3. Application responsibilities
 
-- **web:** Bootstraps the future local wiki, graph, repository navigation, search, and context-inspection interface. It currently renders only the starter page.
+- **web:** Loads one server-configured, validated repository-graph artifact through
+  `GET /api/graph` and renders it in a client-only Cytoscape explorer. It owns visual
+  filtering, layout, selection details, colors, and renderer adaptation, but performs
+  no repository analysis and accepts no browser-supplied filesystem path.
 - **api:** Owns local HTTP transport and future indexing orchestration and knowledge queries. It currently exposes only `GET /health`; server construction is separate from network binding.
-- **cli:** Owns the command-line transport. It implements `lattice index [repository-path]` and `lattice analyze [repository-path] [--json]`, both defaulting to the current directory. It prints concise human summaries or a deterministic versioned JSON DTO. Parsing remains in the core parser library.
+- **cli:** Owns the command-line transport. It implements `index`, `analyze`,
+  `context`, and `graph`. The graph command composes all deterministic stages, creates
+  a versioned graph artifact, and atomically writes it under the analyzed repository
+  by default. Parsing and graph facts remain in their core libraries.
 - **mcp-server:** Owns the future Model Context Protocol transport for coding agents. It currently prints `Lattice MCP Server` and implements no MCP behavior.
 
 Applications are entry points and composition roots. Reusable logic belongs in libraries.
@@ -39,7 +45,10 @@ Applications are entry points and composition roots. Reusable logic belongs in l
 - **indexer:** Validates repository roots and deterministically describes source files. It owns ignore policy, binary and size filtering, extension-based language detection, stable path IDs, scan models, and repository-scanning domain errors. Parsing is downstream; incremental persistence is not implemented.
 - **analyzer:** Consumes scan and parser metadata in memory and deterministically resolves static ES-module targets, dependency edges, effective exports, symbol bindings, external references, unresolved relationships, and cycles. It performs no parsing or filesystem traversal.
 - **knowledge:** Builds deterministic repository/project/folder/file/symbol nodes, typed relations, public surfaces, project dependencies, and structural metrics from prior-stage results and injected project metadata. It performs no I/O or inference.
-- **graph:** Graph entities, relationships, and traversal.
+- **graph:** Validates and indexes canonical repository-knowledge nodes and relations,
+  provides deterministic incoming/outgoing/neighbor queries, and creates bounded,
+  transport-neutral target-neighborhood projections. It performs no repository
+  analysis, I/O, persistence, inference, ranking, layout, or rendering.
 
 ### Data access
 
@@ -100,7 +109,12 @@ User
              └── Shared Lattice libraries
 ```
 
-This diagram shows the intended entry-point relationships, not a set of running distributed services. All components are local processes in one monorepo. The CLI invokes the repository scanner for `lattice index` and composes scanner plus parser for `lattice analyze`; the MCP entry point still only prints a startup message, the web application is static scaffolding, and the API only reports health.
+This diagram shows the intended entry-point relationships, not a set of running
+distributed services. All components are local processes in one monorepo. The CLI
+invokes the repository scanner for `lattice index` and composes the full deterministic
+pipeline for `lattice analyze` and `lattice graph`; the MCP entry point still only
+prints a startup message, the web application visualizes configured graph artifacts,
+and the API application only reports health.
 
 ## 7. Current data flow
 
@@ -123,8 +137,25 @@ Knowledge Builder
     ↓
 Repository Knowledge Model
     ↓
-Wiki, Context Builder, Search, MCP — planned
+Validated Repository Graph Index
+    ↓
+Graph Projections, Wiki, Context Builder, Search, MCP
 ```
+
+`RepositoryKnowledge` is already the canonical directed property graph: its node
+arrays and typed relation array own structural facts, stable identities, provenance,
+and metrics. `core/graph` does not copy or rediscover those facts. It retains the
+knowledge object, indexes its existing node and relation objects, validates duplicate
+IDs, missing endpoints, runtime kinds, and endpoint-kind compatibility, and provides
+deterministically ordered queries.
+
+Bounded target-neighborhood projection schema `"1"` contains presentation-safe
+nodes, edges, roots, and limit omissions. It excludes source, hashes, absolute root
+paths, time data, layout coordinates, colors, and UI-library objects. This supports
+truthful hierarchy, project/file dependency, public-export, declaration/binding,
+explicit nesting, and target-neighborhood views. Import dependency must not be
+presented as runtime control flow; call graphs, control/data-flow analysis, runtime
+traces, framework routes, and event producer/consumer evidence remain future inputs.
 
 The CLI calls the core indexer, which uses the injected filesystem adapter. The
 adapter walks entries and reads file bytes; the indexer applies ignore and file
@@ -198,6 +229,12 @@ Repository → Filesystem Scanner → Repository Scan → Tree-sitter Parser
 → Deterministic Context Package → MCP, Coding Agents, Search, Wiki — planned
 ```
 
+The context builder currently performs its own resolver-backed breadth expansion for
+file dependencies because it also assigns feature-specific ranks and source evidence.
+Its generic cycle-safe adjacency traversal is a candidate for later reuse through
+`core/graph`; target resolution, ranking, omissions, excerpt construction, and source
+integrity remain context-builder responsibilities.
+
 File, symbol, folder, and project targets use one explicit lookup strategy. Integer
 priority classes plus path, source location, and stable-ID tie breakers rank
 candidates. Targets and hierarchy are mandatory; optional entities stop at validated
@@ -227,14 +264,35 @@ identity, normalized options, and selected hashes when source is enabled. Persis
 is deferred with caching infrastructure; semantic relevance is deferred until after
 structural evidence; token counting belongs to future model-specific packing.
 
-The API still implements only `GET /health`. The web and MCP entry points do not
-consume repository scans yet.
+The API still implements only `GET /health`. The web application consumes a generated
+artifact rather than repository scans. The MCP entry point remains scaffolding.
+
+The implemented graph visualization flow is:
+
+```text
+Repository → CLI analysis → RepositoryKnowledge → RepositoryGraph
+→ GraphProjection → .lattice/graph.json → configured Next.js loader
+→ browser-safe JSON → Cytoscape visualization
+```
+
+Repository graph artifact schema `"1"` is independent of analyze schema `"3"` and
+projection schema `"1"`. It contains repository identity without an absolute path,
+normalized view options, validated counts, and the projection. The CLI may replace
+only an existing valid Lattice graph artifact and uses a same-directory atomic write.
+The Next.js route reads only `LATTICE_GRAPH_PATH`, disables caching, validates the
+artifact again, and never exposes the configured path.
+
+Repository visualization is progressive: the client initially projects three
+hierarchy edges from the repository root, can reveal or collapse three-level branch
+increments, and can isolate a node with its complete structural subtree and ancestor
+chain without sibling branches. This is presentation state only; it neither changes
+the artifact nor derives new repository facts.
 
 ## 8. Planned architecture
 
 > **Planned — not implemented.**
 
-Repository knowledge will feed planned graph and feature libraries. Data-access adapters will eventually persist local state. Feature libraries will compose wiki, search, and context-building behavior. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
+Repository graph projections will feed planned feature libraries. Data-access adapters will eventually persist canonical knowledge and derived artifacts. Feature libraries will compose wiki, search, and context-building behavior. Wiki pages will use stable page identities, one primary structural target, evidence-backed sections, related-node links, relationship summaries, optional source references, and separately stored generated prose that cites node/relation evidence IDs. LLM assistance will remain optional, provider-independent, validated, and downstream of deterministic analysis. The web, API, CLI, and MCP entry points will expose those shared capabilities without forming a microservice architecture.
 
 ## 9. Architectural decision log
 
@@ -268,6 +326,9 @@ Repository knowledge will feed planned graph and feature libraries. Data-access 
 | 2026-07-20 | Make selection reasons and omissions contractual                                     | Accepted | Consumers can explain inclusion and detect limit exclusions.                                                                                                       |
 | 2026-07-20 | Version context packages independently as schema 1                                   | Accepted | Target packages are separate from full analyze schema 3.                                                                                                           |
 | 2026-07-20 | Expose context as a separate CLI command                                             | Accepted | Analyze remains stable while target context has its own contract.                                                                                                  |
+| 2026-07-22 | Treat structural knowledge as the canonical property graph                           | Accepted | Graph operations reuse knowledge nodes, relations, and IDs instead of creating a second source of repository facts.                                                |
+| 2026-07-22 | Version bounded graph projections independently as schema 1                          | Accepted | Visualization-safe transport records evolve independently from analyze schema 3 and contain no UI-library or layout state.                                         |
+| 2026-07-22 | Keep graph artifact generation in the CLI and visualization in web                   | Accepted | The browser never analyzes repositories; deterministic evidence crosses the boundary through a validated, versioned artifact.                                      |
 
 ## 10. Documentation-update rules
 

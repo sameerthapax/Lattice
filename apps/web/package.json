@@ -1,0 +1,21 @@
+{
+  "name": "@lattice/web",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@lattice/core-graph": "0.0.1",
+    "@phosphor-icons/react": "^2.1.10",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cytoscape": "^3.34.0",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "postcss": "^8.5.22",
+    "tailwindcss": "^4.3.3"
+  }
+}

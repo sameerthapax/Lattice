@@ -13,6 +13,15 @@ interface ProjectConfiguration {
   readonly targets?: unknown;
 }
 
+interface PackageConfiguration {
+  readonly name?: unknown;
+  readonly workspaces?: unknown;
+  readonly main?: unknown;
+  readonly module?: unknown;
+  readonly types?: unknown;
+  readonly exports?: unknown;
+}
+
 export async function loadWorkspaceProjects(
   scan: RepositoryScan,
   fileSystem: RepositoryFileSystem,
@@ -55,7 +64,127 @@ export async function loadWorkspaceProjects(
       ...(entryPoints.length === 0 ? {} : { entryPoints }),
     });
   }
-  return projects;
+  const occupiedRoots = new Set(
+    projects.map((project) => project.rootRelativePath),
+  );
+  const workspacePatterns = await loadPackageWorkspacePatterns(
+    scan,
+    fileSystem,
+  );
+  for (const file of scan.files
+    .filter(
+      (candidate) =>
+        candidate.relativePath.endsWith('/package.json') &&
+        candidate.relativePath !== 'package.json',
+    )
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath, 'en'))) {
+    const rootRelativePath = file.relativePath.slice(
+      0,
+      -'/package.json'.length,
+    );
+    if (
+      occupiedRoots.has(rootRelativePath) ||
+      !workspacePatterns.some((pattern) =>
+        matchesWorkspacePattern(rootRelativePath, pattern),
+      )
+    )
+      continue;
+    const text = await fileSystem.readOptionalText(file.absolutePath);
+    if (text === null) continue;
+    const parsed: unknown = JSON.parse(text);
+    if (!isObject(parsed)) continue;
+    const configuration: PackageConfiguration = parsed;
+    if (
+      typeof configuration.name !== 'string' ||
+      configuration.name.length === 0
+    )
+      continue;
+    const entryPoints = packageEntryPoints(
+      configuration,
+      rootRelativePath,
+      scan,
+    );
+    projects.push({
+      name: configuration.name,
+      kind: 'unknown',
+      rootRelativePath,
+      ...(entryPoints.length === 0 ? {} : { entryPoints }),
+    });
+  }
+  return projects.sort(
+    (a, b) =>
+      a.rootRelativePath.localeCompare(b.rootRelativePath, 'en') ||
+      a.name.localeCompare(b.name, 'en'),
+  );
+}
+
+async function loadPackageWorkspacePatterns(
+  scan: RepositoryScan,
+  fileSystem: RepositoryFileSystem,
+): Promise<readonly string[]> {
+  const rootPackage = scan.files.find(
+    (file) => file.relativePath === 'package.json',
+  );
+  if (!rootPackage) return [];
+  const text = await fileSystem.readOptionalText(rootPackage.absolutePath);
+  if (text === null) return [];
+  const parsed: unknown = JSON.parse(text);
+  if (!isObject(parsed)) return [];
+  const workspaces = parsed['workspaces'];
+  const values = Array.isArray(workspaces)
+    ? workspaces
+    : isObject(workspaces) && Array.isArray(workspaces['packages'])
+      ? workspaces['packages']
+      : [];
+  return values
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.replace(/^\.\//, '').replace(/\/$/, ''))
+    .sort((a, b) => a.localeCompare(b, 'en'));
+}
+
+function matchesWorkspacePattern(value: string, pattern: string): boolean {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('**', '\0')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('\0', '.*');
+  return new RegExp(`^${escaped}$`, 'u').test(value);
+}
+
+function packageEntryPoints(
+  configuration: PackageConfiguration,
+  rootRelativePath: string,
+  scan: RepositoryScan,
+): readonly WorkspaceProjectEntryPoint[] {
+  const candidates = new Set<string>();
+  for (const value of [
+    configuration.main,
+    configuration.module,
+    configuration.types,
+  ])
+    if (typeof value === 'string') candidates.add(value);
+  collectExportPaths(configuration.exports, candidates);
+  const scannedPaths = new Set(scan.files.map((file) => file.relativePath));
+  return [...candidates]
+    .map((value) =>
+      `${rootRelativePath}/${value.replace(/^\.\//, '')}`.replaceAll('//', '/'),
+    )
+    .filter((relativePath) => scannedPaths.has(relativePath))
+    .sort((a, b) => a.localeCompare(b, 'en'))
+    .map((relativePath) => ({ relativePath }));
+}
+
+function collectExportPaths(value: unknown, result: Set<string>): void {
+  if (typeof value === 'string') {
+    result.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectExportPaths(item, result);
+    return;
+  }
+  if (isObject(value))
+    for (const item of Object.values(value)) collectExportPaths(item, result);
 }
 
 function findConfiguredEntryPoints(

@@ -1,8 +1,9 @@
+import { GraphExplorer } from '../components/graph-explorer';
+
 export default function Home() {
   return (
-    <main>
-      <h1>Lattice</h1>
-      <p>Repository knowledge for humans and coding agents.</p>
+    <main className="min-h-[100dvh] bg-background text-foreground">
+      <GraphExplorer />
     </main>
   );
 }

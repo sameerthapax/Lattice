@@ -33,6 +33,15 @@ import {
   type SymbolContextTarget,
   type ContextTarget,
 } from '@lattice/context-builder';
+import {
+  createRepositoryGraph,
+  createRepositoryGraphArtifact,
+  RepositoryGraphArtifactError,
+  RepositoryGraphInputError,
+  type CreateGraphViewOptions,
+  type GraphViewKind,
+  type RepositoryGraphArtifact,
+} from '@lattice/core-graph';
 
 import {
   buildAnalyzeJsonOutput,
@@ -42,6 +51,11 @@ import {
 } from './analyze-output';
 import { loadWorkspaceAliases } from './workspace-aliases';
 import { loadWorkspaceProjects } from './workspace-projects';
+import {
+  GraphArtifactWriteError,
+  writeGraphArtifact,
+  type WriteGraphArtifactInput,
+} from './graph-output';
 
 export interface CliDependencies {
   readonly currentDirectory: () => string;
@@ -60,6 +74,9 @@ export interface CliDependencies {
   readonly fileSystem: RepositoryFileSystem;
   readonly writeError: (message: string) => void;
   readonly writeOutput: (message: string) => void;
+  readonly writeGraphArtifact?: (
+    input: WriteGraphArtifactInput,
+  ) => Promise<string>;
 }
 
 const defaultDependencies: CliDependencies = {
@@ -75,14 +92,18 @@ const defaultDependencies: CliDependencies = {
   writeOutput: (message: string): void => {
     process.stdout.write(message);
   },
+  writeGraphArtifact,
 };
 
 interface ParsedCliArguments {
-  readonly command: 'index' | 'analyze' | 'context';
+  readonly command: 'index' | 'analyze' | 'context' | 'graph';
   readonly repositoryPath: string | null;
   readonly json: boolean;
   readonly contextTarget: ContextTarget | null;
   readonly contextOptions: ContextSelectionOptions;
+  readonly graphOptions: CreateGraphViewOptions;
+  readonly graphOutputPath: string | null;
+  readonly pretty: boolean;
 }
 
 export async function runCli(
@@ -95,14 +116,22 @@ export async function runCli(
     return 1;
   }
 
-  const { command, repositoryPath, json, contextTarget, contextOptions } =
-    parsedArguments;
+  const {
+    command,
+    repositoryPath,
+    json,
+    contextTarget,
+    contextOptions,
+    graphOptions,
+    graphOutputPath,
+    pretty,
+  } = parsedArguments;
   const startTime = json ? null : dependencies.nowMilliseconds();
   try {
     const scan = await dependencies.scan({
       rootPath: repositoryPath ?? dependencies.currentDirectory(),
     });
-    if (command === 'analyze' || command === 'context') {
+    if (command !== 'index') {
       const analysis = await dependencies.analyze({
         scan,
         fileSystem: dependencies.fileSystem,
@@ -124,7 +153,23 @@ export async function runCli(
           dependencies.fileSystem,
         ),
       });
-      if (command === 'context') {
+      if (command === 'graph') {
+        const artifact = createRepositoryGraphArtifact(
+          createRepositoryGraph(knowledge),
+          graphOptions,
+        );
+        const outputPath = await (
+          dependencies.writeGraphArtifact ?? writeGraphArtifact
+        )({
+          artifact,
+          repositoryRoot: scan.rootPath,
+          ...(graphOutputPath === null ? {} : { outputPath: graphOutputPath }),
+          pretty,
+        });
+        dependencies.writeOutput(
+          `${formatGraphSummary(artifact, scan.rootPath, outputPath)}\n`,
+        );
+      } else if (command === 'context') {
         const package_ = await buildContextPackage({
           scan,
           analysis,
@@ -194,9 +239,12 @@ export async function runCli(
         error instanceof ParserInitializationError ||
         error instanceof ResolverInputError ||
         error instanceof KnowledgeBuilderInputError ||
-        error instanceof ContextBuilderInputError
+        error instanceof ContextBuilderInputError ||
+        error instanceof RepositoryGraphInputError ||
+        error instanceof RepositoryGraphArtifactError ||
+        error instanceof GraphArtifactWriteError
         ? error.message
-        : command === 'analyze' || command === 'context'
+        : command !== 'index'
           ? 'Repository analysis failed unexpectedly.'
           : 'Repository scan failed unexpectedly.',
     );
@@ -301,14 +349,22 @@ function parseCliArguments(
   arguments_: readonly string[],
 ): ParsedCliArguments | string {
   const [command, ...values] = arguments_;
-  if (command !== 'index' && command !== 'analyze' && command !== 'context') {
-    return 'Usage: lattice <index|analyze|context> [repository-path]';
+  if (
+    command !== 'index' &&
+    command !== 'analyze' &&
+    command !== 'context' &&
+    command !== 'graph'
+  ) {
+    return 'Usage: lattice <index|analyze|context|graph> [repository-path]';
   }
 
   let repositoryPath: string | null = null;
   let json = false;
   let contextTarget: ContextTarget | null = null;
   const contextOptions: Record<string, boolean | number> = {};
+  const graphOptions: Record<string, string | number> = {};
+  let graphOutputPath: string | null = null;
+  let pretty = false;
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index] as string;
     if (value.startsWith('-')) {
@@ -371,6 +427,48 @@ function parseCliArguments(
           continue;
         }
       }
+      if (command === 'graph') {
+        if (value === '--pretty' && !pretty) {
+          pretty = true;
+          continue;
+        }
+        if (value === '--output' && graphOutputPath === null) {
+          const output = values[++index];
+          if (!output || output.startsWith('-')) return graphUsage();
+          graphOutputPath = output;
+          continue;
+        }
+        if (value === '--view' && graphOptions['kind'] === undefined) {
+          const view = values[++index];
+          if (!view || !GRAPH_VIEWS.includes(view as GraphViewKind))
+            return graphUsage();
+          graphOptions['kind'] = view;
+          continue;
+        }
+        if (
+          value === '--target' &&
+          graphOptions['targetNodeId'] === undefined
+        ) {
+          const target = values[++index];
+          if (!target || target.startsWith('-')) return graphUsage();
+          graphOptions['targetNodeId'] = target;
+          continue;
+        }
+        const graphNumberOptions: Record<string, keyof CreateGraphViewOptions> =
+          {
+            '--max-depth': 'maxDepth',
+            '--max-nodes': 'maxNodes',
+            '--max-relations': 'maxRelations',
+          };
+        if (value in graphNumberOptions) {
+          const raw = values[++index];
+          const parsed = Number(raw);
+          if (!raw || !Number.isInteger(parsed))
+            return `Invalid numeric option: ${value}`;
+          graphOptions[graphNumberOptions[value] as string] = parsed;
+          continue;
+        }
+      }
       return `Unknown option: ${value}\nUsage: lattice ${command} [repository-path]${command === 'analyze' ? ' [--json]' : ''}`;
     }
     if (repositoryPath !== null) {
@@ -379,7 +477,44 @@ function parseCliArguments(
     repositoryPath = value;
   }
   if (command === 'context' && !contextTarget) return contextUsage();
-  return { command, repositoryPath, json, contextTarget, contextOptions };
+  return {
+    command,
+    repositoryPath,
+    json,
+    contextTarget,
+    contextOptions,
+    graphOptions,
+    graphOutputPath,
+    pretty,
+  };
+}
+
+const GRAPH_VIEWS: readonly GraphViewKind[] = [
+  'repository',
+  'project-dependencies',
+  'file-dependencies',
+  'public-api',
+  'full',
+];
+
+function graphUsage(): string {
+  return 'Usage: lattice graph [repository-path] [--output path] [--view repository|project-dependencies|file-dependencies|public-api|full] [--target node-id] [--max-depth number] [--max-nodes number] [--max-relations number] [--pretty]';
+}
+
+export function formatGraphSummary(
+  artifact: RepositoryGraphArtifact,
+  repositoryRoot: string,
+  outputPath: string,
+): string {
+  return [
+    'Graph generated successfully',
+    `Repository: ${repositoryRoot}`,
+    `View: ${artifact.view.kind}`,
+    `Nodes: ${artifact.summary.nodeCount}`,
+    `Edges: ${artifact.summary.edgeCount}`,
+    `Omissions: ${artifact.summary.omissionCount}`,
+    `Output: ${outputPath}`,
+  ].join('\n');
 }
 
 function contextUsage(): string {

@@ -157,6 +157,76 @@ describe('runCli', () => {
     );
   });
 
+  it('generates a graph artifact at the default repository output', async () => {
+    const dependencies = createDependencies();
+
+    const exitCode = await runCli(['graph', '/repository'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.writeGraphArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryRoot: '/repository',
+        pretty: false,
+        artifact: expect.objectContaining({
+          artifactKind: 'repository-graph',
+          schemaVersion: '1',
+        }),
+      }),
+    );
+    expect(getWrittenOutput(dependencies)).toContain(
+      'Output: /repository/.lattice/graph.json',
+    );
+  });
+
+  it('parses graph view, output, target, limits, and pretty options', async () => {
+    const dependencies = createDependencies();
+
+    await runCli(
+      [
+        'graph',
+        '/repository',
+        '--output',
+        '.lattice/files.json',
+        '--view',
+        'file-dependencies',
+        '--max-nodes',
+        '10',
+        '--max-relations',
+        '20',
+        '--pretty',
+      ],
+      dependencies,
+    );
+
+    expect(dependencies.writeGraphArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outputPath: '.lattice/files.json',
+        pretty: true,
+        artifact: expect.objectContaining({
+          view: expect.objectContaining({
+            kind: 'file-dependencies',
+            maxNodes: 10,
+            maxRelations: 20,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects unsupported graph views and invalid graph limits', async () => {
+    const unsupported = createDependencies();
+    const invalidLimit = createDependencies();
+
+    expect(await runCli(['graph', '--view', 'runtime-flow'], unsupported)).toBe(
+      1,
+    );
+    expect(await runCli(['graph', '--max-nodes', 'many'], invalidLimit)).toBe(
+      1,
+    );
+    expect(unsupported.scan).not.toHaveBeenCalled();
+    expect(invalidLimit.scan).not.toHaveBeenCalled();
+  });
+
   it('analyzes an explicitly supplied repository path', async () => {
     const dependencies = createDependencies();
 
@@ -405,7 +475,7 @@ describe('runCli', () => {
       1,
     );
     expect(dependencies.writeError).toHaveBeenCalledWith(
-      'Usage: lattice <index|analyze|context> [repository-path]',
+      'Usage: lattice <index|analyze|context|graph> [repository-path]',
     );
   });
 
@@ -616,6 +686,11 @@ function createDependencies(): CliDependencies {
     resolve: vi.fn(() => resolution),
     writeError: vi.fn(),
     writeOutput: vi.fn(),
+    writeGraphArtifact: vi.fn(async ({ repositoryRoot, outputPath }) =>
+      outputPath
+        ? `${repositoryRoot}/${outputPath}`
+        : `${repositoryRoot}/.lattice/graph.json`,
+    ),
   };
 }
 

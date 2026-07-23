@@ -2,10 +2,12 @@
   "name": "@lattice/core-graph",
   "version": "0.0.1",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
   "dependencies": {
-    "tslib": "^2.3.0"
+    "@lattice/core-knowledge": "0.0.1",
+    "tslib": "^2.3.0",
+    "zod": "^4.4.3"
   }
 }
